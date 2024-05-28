@@ -1,0 +1,16 @@
+tocancel*
+*.ipynb
+trained_models/*
+trained_models
+logs
+logs/*
+logs/
+trained_models/
+temporary*
+mytask_logs/*
+mytask_logs/
+Eval*
+*.gif
+*.log*
+*.pyc
+__pycache__
