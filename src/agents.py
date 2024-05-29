@@ -135,7 +135,7 @@ class Agent(object):
             self.train_episodes_run+=1
             self.train_episodes_run_2+=1
             
-            self.prev_action_logits = a
+            self.prev_action_logits = a_base
 
 #             restoration_loss1 = self.w_restoration * (x_restored1 - self.state.unsqueeze(0).detach()).pow(2).sum()/ self.batch_size
             
@@ -270,7 +270,7 @@ class Agent(object):
             
             a = a1 + a_base*int(not ZERO_ABASE)
             
-            self.prev_action_logits = a
+            self.prev_action_logits = a_base
                 
         prob = F.softmax(a, dim=1)
         action = prob.max(1)[1].data.cpu().numpy()

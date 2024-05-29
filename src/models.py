@@ -11,7 +11,7 @@ import torch as T
 import numpy as np
 
 from torch.distributions.normal import Normal
-from ConvLSTM import ConvLSTM,ConvLSTMCell,ConvLSTMwithActionCell
+from ConvLSTM import ConvLSTM,ConvLSTMCell,ConvLSTMwithAbaseCell
 
 #kld, x_restored, v, a, hx, cx, s, S
 
@@ -76,7 +76,7 @@ class Level1(nn.Module):
         self.actor = nn.Linear(12800, 6)
         self.critic = nn.Linear(12800, 1)
         #32x40x40
-        self.ConvLSTM_mu = ConvLSTMwithActionCell(input_dim=32,
+        self.ConvLSTM_mu = ConvLSTMwithAbaseCell(input_dim=32,
                                  hidden_dim=32,
                                  kernel_size=(5, 5),
                                  bias=True,
@@ -142,7 +142,7 @@ class Level1(nn.Module):
 #         kl = -0.5*(1 + logvar - mu**2 - T.exp(logvar)).mean()
 
         z_t = self.N.sample(mu.shape)
-        self.z_EMA_t= self.z_EMA_t*self.gamma1 + z_t*(1-self.gamma1)
+        self.z_EMA_t= z_t #self.z_EMA_t*self.gamma1 + z_t*(1-self.gamma1)
         s = mu + T.exp(logvar / 2) * self.z_EMA_t
         
         kl = -0.5*(1 + logvar - mu**2 - T.exp(logvar)).mean() # + mu.detach()**2
@@ -319,7 +319,7 @@ class Level2(nn.Module):
         
         z_t = self.N.sample(mu.shape)
 #         self.z_EMA_t = self.z_EMA_t*self.gamma2 + np.sqrt(1-self.gamma2**2) * z_t 
-        self.z_EMA_t=self.z_EMA_t*self.gamma2 + z_t*(1-self.gamma2)
+        self.z_EMA_t=self.z_EMA_t*self.gamma1 + z_t*(1-self.gamma1)
         s = mu + T.exp(logvar / 2) * self.z_EMA_t
         
         kl = -0.5*(1 + logvar - mu**2 - T.exp(logvar)).mean() 
