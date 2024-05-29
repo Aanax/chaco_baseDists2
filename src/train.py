@@ -394,7 +394,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         
         policy_loss1 = policy_loss1 - \
             player.log_probs1[i] * \
-            gae1 - 1*torch.sum(int(gae1>0)*player.probs_base[i].detach()*torch.log(player.probs1[i]))*gae1
+            gae1 - 2*torch.sum(int(gae1>0)*player.probs_base[i].detach()*torch.log(player.probs1[i]))*gae1
         
         policy_loss_base = policy_loss_base - \
             player.log_probs1_throughbase[i] * \
