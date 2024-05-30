@@ -71,7 +71,7 @@ def test(args, shared_model, env_conf, counter, num):
             player.model2 = player.model2.cuda()
             player.state = player.state.cuda()
     flag = True
-    max_score = 0
+    max_score = -20
     rgb_frames = []
     prev_video_at = 0
     while True:
