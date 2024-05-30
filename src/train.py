@@ -376,7 +376,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         # Generalized Advantage Estimataion
         delta_t2 = (1-gamma1)*(player.values1[i].detach()+D1) + gamma2 * \
             player.values2[i + 1].data - player.values2[i].data
-        gae1 = gae1 * gamma1 * tau + (delta_t1 + delta_t2)
+        gae1 = gae1 * gamma1 * tau + (delta_t1)
         gae2 = gae2 * gamma2 * tau + (delta_t2) # delta_t1 + 
         S_loss1 += part_S_loss1*abs(gae1)
         S_loss2 += part_S_loss2*abs(gae2)
@@ -394,7 +394,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         
         policy_loss1 = policy_loss1 - \
             player.log_probs1[i] * \
-            gae1 - 2*torch.sum(int(gae1>0)*player.probs_base[i].detach()*torch.log(player.probs1[i]))*gae1
+            gae1 - 1*torch.sum(int(gae1>0)*player.probs_base[i].detach()*torch.log(player.probs1[i]))*gae1
         
         policy_loss_base = policy_loss_base - \
             player.log_probs1_throughbase[i] * \
@@ -404,7 +404,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         advantage2 = V_last2 - player.values2[i]
         value_loss2 = value_loss2 + 0.5 * advantage2.pow(2)
         
-        V_last1 = gamma1 * V_last1 + player.rewards1[i]+r1_bonus+delta_t2
+        V_last1 = gamma1 * V_last1 + player.rewards1[i]
         advantage1 = V_last1 - player.values1[i]
         value_loss1 = value_loss1 + 0.5 * advantage1.pow(2)
         
