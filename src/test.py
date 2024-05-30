@@ -71,7 +71,7 @@ def test(args, shared_model, env_conf, counter, num):
             player.model2 = player.model2.cuda()
             player.state = player.state.cuda()
     flag = True
-    max_score = 0
+    max_score = -20
     rgb_frames = []
     prev_video_at = 0
     while True:
@@ -132,11 +132,11 @@ def test(args, shared_model, env_conf, counter, num):
                     with torch.cuda.device(gpu_id):
                         state_to_save = shared_model.state_dict()
                         torch.save(state_to_save, '{0}{1}{2}_{3}.dat'.format(
-                            args["Training"]["save_model_dir"], args["Training"]["env"],architecture_type,reward_sum))
+                            args["Training"]["save_model_dir"], args["Training"]["env"],architecture_type,str(reward_sum)))
                 else:
                     state_to_save = shared_model.state_dict()
                     torch.save(state_to_save, '{0}{1}{2}_{3}.dat'.format(
-                        args["Training"]["save_model_dir"], args["Training"]["env"],architecture_type,reward_sum))
+                        args["Training"]["save_model_dir"], args["Training"]["env"],architecture_type,str(reward_sum)))
 
             reward_sum = 0
             player.eps_len = 0
