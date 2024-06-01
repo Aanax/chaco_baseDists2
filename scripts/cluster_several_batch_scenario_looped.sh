@@ -1,5 +1,5 @@
 #!/bin/sh
-#SBATCH --job-name=BD5-parallel-experiment
+#SBATCH --job-name=BD5-br1-parallel-experiment
 #SBATCH -D /s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/
 #SBATCH -o /s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/logs/%j.out
 #SBATCH -e /s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/logs/%j.err
