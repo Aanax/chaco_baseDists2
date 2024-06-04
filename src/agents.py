@@ -130,6 +130,7 @@ class Agent(object):
             
             a = a1 + a_base.detach()
             
+            
             a_throughbase = a1.detach() + a_base
             
             self.train_episodes_run+=1
@@ -152,6 +153,7 @@ class Agent(object):
 #             restoration_loss2.backward(retain_graph = True)
         
         prob1, log_prob1, action1, entropy1 = self.get_probs(a)
+        self.actions.append(action1)
         
         prob_base, log_prob_base, action_base, entropy_base = self.get_probs(a_base)
         
@@ -177,6 +179,7 @@ class Agent(object):
         self.a2_prev = torch.clone(a2.detach())
         
         
+        
         self.entropies1.append(entropy1)
         self.values1.append(v1)
         self.log_probs1.append(log_prob1)
@@ -185,6 +188,7 @@ class Agent(object):
         self.probs_base.append(prob_base)
         self.logits1.append(a)
         self.logits_base.append(a_base)
+        self.logits_play.append(a1)
         
         self.rewards1.append(self.reward)
         self.klds1.append(kld1)
@@ -313,7 +317,9 @@ class Agent(object):
         self.probs1 = []
         self.logits1 = []
         self.logits_base = []
+        self.logits_play = []
         self.probs_base = []
+        self.actions = []
         self.rewards1 = []
         self.entropies1 = []
         self.klds1 = []
