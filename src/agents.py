@@ -159,6 +159,8 @@ class Agent(object):
         
         prob_throughbase, log_prob_throughbase, action_throughbase, entropy_throughbase = self.get_probs(a_throughbase)
         
+        prob_play, log_prob_play, action_play, entropy_play = self.get_probs(a1)
+        
         self.log_probs1_throughbase.append(log_prob_throughbase)
 #         prob2, log_prob2, action2, entropy2 = self.get_probs(a2)
 #         action2 = a2
@@ -186,6 +188,10 @@ class Agent(object):
         self.log_probs_base.append(log_prob_base)
         self.probs1.append(prob1)
         self.probs_base.append(prob_base)
+        self.probs_play.append(prob_play)
+        
+        self.probs_throughbase.append(prob_throughbase)
+        
         self.logits1.append(a)
         self.logits_base.append(a_base)
         self.logits_play.append(a1)
@@ -319,11 +325,13 @@ class Agent(object):
         self.logits_base = []
         self.logits_play = []
         self.probs_base = []
+        self.probs_play = []
         self.actions = []
         self.rewards1 = []
         self.entropies1 = []
         self.klds1 = []
         self.log_probs1_throughbase = []
+        self.probs_throughbase = []
         
         self.values1_runningmean = []
         self.Ss1_runningmean = []

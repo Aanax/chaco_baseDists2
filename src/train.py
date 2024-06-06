@@ -197,13 +197,13 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 
             losses = train_func(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, gamma2, w_curiosity, kld_loss_calc)
 
-            kld_loss1, policy_loss1, value_loss1, MPDI_loss1, kld_loss2, policy_loss2, value_loss2, MPDI_loss2, policy_loss_base, kld_loss_actor2, loss_restoration1,loss_restoration2 = losses
-            loss1 = (args["Training"]["w_policy"]*policy_loss1+args["Training"]["w_value"]*value_loss1)
-            loss2 = (args["Training"]["w_policy"]*policy_loss2+args["Training"]["w_value"]*value_loss2 + args["Training"]["w_policy"]*policy_loss_base)
+            kld_loss1, policy_loss1, value_loss1, MPDI_loss1, kld_loss2, policy_loss2, value_loss2, MPDI_loss2, policy_loss_base, kld_loss_actor2, loss_restoration1,loss_restoration2, ce_loss1, ce_loss_base = losses
+            loss1 = (args["Training"]["w_policy"]*policy_loss1+args["Training"]["w_value"]*value_loss1 + args["Training"]["w_policy"]*ce_loss1)
+            loss2 = (args["Training"]["w_policy"]*policy_loss2+args["Training"]["w_value"]*value_loss2 + args["Training"]["w_policy"]*policy_loss_base + args["Training"]["w_policy"]*ce_loss_base)
 
             loss1 += args["Training"]["w_kld"]*kld_loss1
             loss2 += args["Training"]["w_kld"]*kld_loss2
-            loss2 += 0.1*kld_loss_actor2 #args["Training"]["w_kld"]*
+            loss2 += 0.001*kld_loss_actor2 #args["Training"]["w_kld"]*
 
             loss1 += args["Training"]["w_MPDI"]*MPDI_loss1
             loss2 += args["Training"]["w_MPDI"]*MPDI_loss2
@@ -380,43 +380,46 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
             player.values2[i + 1].data - player.values2[i].data
         gae1 = gae1 * gamma1 * tau + (delta_t1)
         gae2 = gae2 * gamma2 * tau + (delta_t2) # delta_t1 + 
-        S_loss1 += part_S_loss1*abs(gae1)
+        S_loss1 += part_S_loss1*(abs(gae1) + abs(gae2)) #*abs(gae1)
         S_loss2 += part_S_loss2*abs(gae2)
         
         #KL loss
         kld_delta1, kld_delta2 = kld_loss_calc(player, i)
-        kld_loss1+=kld_delta1*abs(gae1)
+        kld_loss1+=kld_delta1**(abs(gae1) + abs(gae2))
         kld_loss2+=kld_delta2*abs(gae2)
         kld_loss_actor2 += player.klds_actor2[i]*abs(gae2)   
         
         restoration_loss1_part = (player.restoreds1[i] - player.restore_labels1[i]).pow(2).sum()/ 20
         restoration_loss2_part = (player.restoreds2[i] - player.restore_labels2[i]).pow(2).sum()/ 20
-        restoration_loss1+= restoration_loss1_part*abs(gae1.item())
+        restoration_loss1+= restoration_loss1_part*(abs(gae1) + abs(gae2))
         restoration_loss2+= restoration_loss2_part*abs(gae2.item())
         
-        Z = (torch.exp(player.logits1[i])/F.softmax(player.logits1[i], dim=1)).squeeze()[0].detach()
+#         Z = (torch.exp(player.logits1[i])/F.softmax(player.logits1[i], dim=1)).squeeze()[0].detach()
         
-#         prob_base_chosen = F.softmax(player.logits_base[i], dim=1)
-        prob_base_chosen = torch.exp(player.logits_base[i])/Z
-        prob_base_chosen = prob_base_chosen.gather(1, Variable(player.actions[i]))
-        
-#         prob_1_chosen = F.softmax(player.logits1[i], dim=1)
-#         prob_1_chosen = prob_1_chosen.gather(1, Variable(player.actions[i]))
-        
-#         prob_play_chosen = F.softmax(player.logits_play[i], dim=1)
-        prob_play_chosen = torch.exp(player.logits_play[i])/Z
-        prob_play_chosen = prob_play_chosen.gather(1, Variable(player.actions[i]))
+# #         prob_base_chosen = F.softmax(player.logits_base[i], dim=1)
+#         prob_base_chosen = torch.exp(player.logits_base[i])/Z
+#         prob_base_chosen = prob_base_chosen.gather(1, Variable(player.actions[i]))
+# #         prob_1_chosen = F.softmax(player.logits1[i], dim=1)
+# #         prob_1_chosen = prob_1_chosen.gather(1, Variable(player.actions[i]))
+# #         prob_play_chosen = F.softmax(player.logits_play[i], dim=1)
+#         prob_play_chosen = torch.exp(player.logits_play[i])/Z
+#         prob_play_chosen = prob_play_chosen.gather(1, Variable(player.actions[i]))
         
         policy_loss1 = policy_loss1 - \
             player.log_probs1[i] * \
-            gae1 + 0.5*((player.log_probs1[i] - torch.log(prob_base_chosen.detach()))**2)*(abs(gae2)/(abs(gae1)+abs(gae2)))
+            gae1
+        ce_loss1 = -0.1*torch.sum(player.probs_base[i].detach()*torch.log(player.probs1[i]))*(abs(gae2)/(abs(gae1)+abs(gae2)))
         
+        #+ 0.5*((player.log_probs1[i] - torch.log(prob_base_chosen.detach()))**2)*(abs(gae2)/(abs(gae1)+abs(gae2)))
+#         p_base.detach*ln(p1), а в лоссе а2 p_play.detach*ln(p1)
         #*gae2*(int(gae2>0))
                 #- 1*torch.sum(int(gae2>0)*player.probs_base[i].detach()*torch.log(player.probs1[i]))*gae2
-        
         policy_loss_base = policy_loss_base - \
             player.log_probs1_throughbase[i] * \
-            gae2 + 0.5*((player.log_probs1_throughbase[i] - torch.log(prob_play_chosen.detach()))**2)*(abs(gae1)/(abs(gae1)+abs(gae2)))
+            gae2 
+        ce_loss_base = -0.1*torch.sum(player.probs_play[i].detach()*torch.log(player.probs_throughbase[i]))*(abs(gae1)/(abs(gae1)+abs(gae2)))
+        
+        #+ 0.5*((player.log_probs1_throughbase[i] - torch.log(prob_play_chosen.detach()))**2)*(abs(gae1)/(abs(gae1)+abs(gae2)))
         
         #value loss
         V_last2 = gamma2 * V_last2 + ((1-gamma1)*(player.values1[i].detach()+D1))
@@ -433,7 +436,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         S_loss1 = torch.mean(S_loss1)
     if not (type(S_loss2)==int):
         S_loss2 = torch.mean(S_loss2)
-    return kld_loss1, policy_loss1, value_loss1, S_loss1, kld_loss2, policy_loss2, value_loss2, S_loss2, policy_loss_base, kld_loss_actor2, restoration_loss1, restoration_loss2
+    return kld_loss1, policy_loss1, value_loss1, S_loss1, kld_loss2, policy_loss2, value_loss2, S_loss2, policy_loss_base, kld_loss_actor2, restoration_loss1, restoration_loss2, ce_loss1, ce_loss_base
 
     
     
