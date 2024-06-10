@@ -1,6 +1,7 @@
 import sys
 import os
 
+
 def isInt(value):
     try:
         int(value)
@@ -9,10 +10,8 @@ def isInt(value):
         return False
 
 
-
-with open(sys.argv[1],'r') as f:
+with open(sys.argv[1], "r") as f:
     for line in f:
         for word in line.split():
             if isInt(word):
-                os.system('scancel %d' %int(word))
-            
+                os.system("scancel %d" % int(word))

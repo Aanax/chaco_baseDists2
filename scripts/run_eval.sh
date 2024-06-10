@@ -47,4 +47,3 @@ conda activate new_torch
 echo `which python`
 
 python /s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/src/eval.py /s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/configs/a3c_with_vae.ini | tee mytask.log."$SLURM_JOBID"
-

@@ -43,4 +43,3 @@ echo ----------
 conda activate pytorch_rl
 
 python ./several_eps_runner.py ./configs/breakout_base_reborn.ini | tee mytask.log."$SLURM_JOBID"
-
