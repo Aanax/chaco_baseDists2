@@ -4,8 +4,8 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 
-## STOP rewrite agetnt with respect to hidden_states.
-## add Star features or switches or separate class
+# STOP rewrite agetnt with respect to hidden_states.
+# add Star features or switches or separate class
 
 
 def init_lstm_states(player):
@@ -13,9 +13,6 @@ def init_lstm_states(player):
     requires_grad = False
     if player.gpu_id >= 0:
         with torch.cuda.device(player.gpu_id):
-
-            num_lstm_layers = 1
-            # TODO switch to none or zero if no such layer.
             player.hx1 = Variable(
                 torch.zeros((1, 32, 20, 20)), requires_grad=requires_grad
             ).cuda()
@@ -41,14 +38,11 @@ class Agent(object):
 
         self.env = env
         self.state = state
-        #         self.hx = None
-        #         self.cx = None
-        self.hx1 = None  # hidden_states1 = [None]
-        self.hx2 = None  # cell_states1 = [None]
-        self.cx1 = None  # hidden_states2 = [None]
-        self.cx2 = None  # cell_states2 = [None]
+        self.hx1 = None
+        self.hx2 = None
+        self.cx1 = None
+        self.cx2 = None
 
-        #         self.states = []
         self.S1_prev = torch.zeros((1, args["Model"]["S1_dim"])).to(
             "cuda:" + str(gpu_id)
         )
@@ -77,12 +71,7 @@ class Agent(object):
         self.w_restoration_future = self.args["Training"]["w_restoration_future"]
 
         self.S1_runningmean = 0
-        #         self.V1_runningmean = 0
-        #         self.D1 = 0
         self.VD_runningmean = 0
-
-        #         self.restorelosses1 = []
-        #         self.restorelosses2 = []
 
         self.restoreds1 = []
         self.restoreds2 = []
@@ -100,9 +89,6 @@ class Agent(object):
             self.get_probs = self.get_probs_multinomial
         else:
             print("NO such action_sample method ", self.args["Player"]["action_sample"])
-            # TODO raise error instead
-
-        model_params_dict = args["Model"]
         init_lstm_states(self)
 
     @staticmethod
@@ -135,12 +121,6 @@ class Agent(object):
                 )
             )
 
-            #             self.S1_runningmean = self.S1_runningmean*self.gamma1 + S1.detach()*(1-self.gamma1)
-
-            # r_i + g*r_i+1 + g^2*r_i+2 + ... + g^(T-i-1)*r_(T-1) + g^(T-i)*V1_T
-
-            #             self.V1_runningmean = self.V1_runningmean*self.gamma1 + (1-self.gamma1)*v1.detach()
-
             (
                 kld2,
                 x_restored2,
@@ -156,14 +136,10 @@ class Agent(object):
                 kl_actor2,
             ) = self.model2((S1.detach(), self.hx2, self.cx2))
 
-            #             a = a1 + a_base.detach()
-
             alpha1 = (abs(v1) / (abs(v1) + abs(v2) + 0.001)).detach()
             alpha2 = (abs(v2) / (abs(v1) + abs(v2) + 0.001)).detach()
 
             a = alpha1 * a1 + alpha2 * a_base.detach()
-
-            #             a_throughbase = a1.detach() + a_base
 
             a_throughbase = alpha1 * a1.detach() + alpha2 * a_base
 
@@ -171,8 +147,6 @@ class Agent(object):
             self.train_episodes_run_2 += 1
 
             self.prev_action_logits = a_base
-
-            #             restoration_loss1 = self.w_restoration * (x_restored1 - self.state.unsqueeze(0).detach()).pow(2).sum()/ self.batch_size
 
             self.restoreds1.append(x_restored1)
             self.restore_labels1.append(self.state.unsqueeze(0).detach())
@@ -195,11 +169,8 @@ class Agent(object):
         prob_play, log_prob_play, action_play, entropy_play = self.get_probs(a1)
 
         self.log_probs1_throughbase.append(log_prob_throughbase)
-        #         prob2, log_prob2, action2, entropy2 = self.get_probs(a2)
-        #         action2 = a2
 
         state, self.reward, self.done, self.info = self.env.step(action1.cpu().numpy())
-
         self.state = torch.from_numpy(state).float()
         if self.gpu_id >= 0:
             with torch.cuda.device(self.gpu_id):
@@ -212,7 +183,6 @@ class Agent(object):
         self.S2_prev = torch.clone(S2.detach())
         self.a1_prev = torch.clone(a1.detach())
         self.a2_prev = torch.clone(a2.detach())
-
         self.entropies1.append(entropy1)
         self.values1.append(v1)
         self.log_probs1.append(log_prob1)
@@ -220,42 +190,28 @@ class Agent(object):
         self.probs1.append(prob1)
         self.probs_base.append(prob_base)
         self.probs_play.append(prob_play)
-
         self.probs_throughbase.append(prob_throughbase)
-
         self.logits1.append(a)
         self.logits_base.append(a_base)
         self.logits_play.append(a1)
-
         self.rewards1.append(self.reward)
         self.klds1.append(kld1)
         self.ss1.append(s1)
         self.Ss1.append(S1)
-
-        #         self.Ss1_runningmean.append(torch.clone(self.S1_runningmean).detach())
-        #         self.values1_runningmean.append(torch.clone(self.V1_runningmean).detach())
-
         self.entropies2.append(entropy2)
         self.values2.append(v2)
         self.log_probs2.append(log_prob2)
         self.klds2.append(kld2)
         self.klds_actor2.append(kl_actor2)
-        #         self.a_klds2.append(a_kld2)
         self.ss2.append(s2)
         self.Ss2.append(S2)
-
         self.states1.append(self.state)
-        #         self.states2.append(S1)
-
         return self
 
     def reset_lstm_states(self):
         requires_grad = False
         if self.gpu_id >= 0:
             with torch.cuda.device(self.gpu_id):
-
-                num_lstm_layers = 1
-                # TODO switch to none or zero if no such layer.
                 self.hx1 = Variable(
                     torch.zeros((1, 32, 20, 20)), requires_grad=requires_grad
                 ).cuda()
@@ -272,31 +228,16 @@ class Agent(object):
                 ).cuda()
 
     def detach_lstm_states(self, levels=[1, 2]):
-        requires_grad = False
-
         if self.gpu_id >= 0:
             with torch.cuda.device(self.gpu_id):
-
-                num_lstm_layers = 1
                 if 1 in levels:
-                    # TODO switch to none or zero if no such layer.
-                    self.hx1 = (
-                        self.hx1.detach()
-                    )  # Variable(self.hx1.data, requires_grad=requires_grad).cuda()
-                    #
-                    self.cx1 = (
-                        self.cx1.detach()
-                    )  # Variable(torch.zeros(num_lstm_layers, (32,40,40)), requires_grad=requires_grad).cuda()
+                    self.hx1 = self.hx1.detach()
+                    self.cx1 = self.cx1.detach()
                     self.train_episodes_run = 0
                 if 2 in levels:
-                    self.hx2 = (
-                        self.hx2.detach()
-                    )  # Variable(torch.zeros(num_lstm_layers, (64,6,6)), requires_grad=requires_grad).cuda()
-                    self.cx2 = (
-                        self.cx2.detach()
-                    )  # Variable(torch.zeros(num_lstm_layers, (64,6,6)), requires_grad=requires_grad).cuda()
+                    self.hx2 = self.hx2.detach()
+                    self.cx2 = self.cx2.detach()
                     self.train_episodes_run_2 = 0
-                # TODO
 
     def action_test(self, ZERO_ABASE=False):
         with torch.no_grad():

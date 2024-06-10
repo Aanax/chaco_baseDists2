@@ -4,7 +4,7 @@ import torch
 # from agents import Agent
 from environment import atari_env
 from utils import setup_logger
-from torch.autograd import Variable
+from torch.autograd import Variable  # noqa
 import os
 import logging
 import time
@@ -57,9 +57,6 @@ def test(args, shared_model, env_conf, counter, num):
     num_tests = 0
     reward_total_sum = 0
 
-    #     player.gpu_id = gpu_id
-    model_params_dict = args["Model"]
-    #     AgentClass = eval(args["Training"]["agent)
     _model1 = Level1(
         args,
         env.observation_space.shape[0],

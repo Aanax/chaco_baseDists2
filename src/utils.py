@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 
 
 def setup_logger(logger_name, log_file, level=logging.INFO):

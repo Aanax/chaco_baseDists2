@@ -1,5 +1,5 @@
 from __future__ import division
-import math
+import math  # noqa
 import torch
 import torch.optim as optim
 from collections import defaultdict
