@@ -128,16 +128,16 @@ class Agent(object):
 
             kld2, x_restored2, v2, a2, a_base, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2((S1.detach(), self.hx2, self.cx2))
             
-#             a = a1 + a_base.detach()
+            a = a1 + a_base.detach()
 
-            alpha1 = (abs(v1)/(abs(v1)+abs(v2)+0.001)).detach()
-            alpha2 = (abs(v2)/(abs(v1)+abs(v2)+0.001)).detach()
+#             alpha1 = (abs(v1)/(abs(v1)+abs(v2)+0.001)).detach()
+#             alpha2 = (abs(v2)/(abs(v1)+abs(v2)+0.001)).detach()
             
-            a = alpha1*a1 + alpha2*a_base.detach()
+#             a = alpha1*a1 + alpha2*a_base.detach()
     
-#             a_throughbase = a1.detach() + a_base
+            a_throughbase = a1.detach() + a_base
 
-            a_throughbase = alpha1*a1.detach() + alpha2*a_base
+#             a_throughbase = alpha1*a1.detach() + alpha2*a_base
             
             self.train_episodes_run+=1
             self.train_episodes_run_2+=1
@@ -174,8 +174,8 @@ class Agent(object):
                 self.state = self.state.cuda()
         self.reward = max(min(self.reward, 1), -1)
         
-        self.alphas1.append(alpha1)
-        self.alphas2.append(alpha2)
+#         self.alphas1.append(alpha1)
+#         self.alphas2.append(alpha2)
         self.S1_prev = torch.clone(S1.detach())
         self.S2_prev = torch.clone(S2.detach())
         self.a1_prev = torch.clone(a1.detach())
@@ -279,13 +279,13 @@ class Agent(object):
 
             kld2, x_restored2, v2, a2, a_base, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2((S1, self.hx2, self.cx2))
             
-#             a = a1 + a_base*int(not ZERO_ABASE)
+            a = a1 + a_base*int(not ZERO_ABASE)
             
     
-            alpha1 = abs(v1)/(abs(v1)+abs(v2)+0.001)
-            alpha2 = abs(v2)/(abs(v1)+abs(v2)+0.001)
+#             alpha1 = abs(v1)/(abs(v1)+abs(v2)+0.001)
+#             alpha2 = abs(v2)/(abs(v1)+abs(v2)+0.001)
             
-            a = alpha1*a1 + alpha2*a_base
+#             a = alpha1*a1 + alpha2*a_base
             
             self.prev_action_logits = a_base
                 
