@@ -203,7 +203,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 
             loss1 += args["Training"]["w_kld"]*kld_loss1
             loss2 += args["Training"]["w_kld"]*kld_loss2
-            loss2 += 0.001*kld_loss_actor2 #args["Training"]["w_kld"]*
+            loss2 += 0.000*kld_loss_actor2 #args["Training"]["w_kld"]*
 
             loss1 += args["Training"]["w_MPDI"]*MPDI_loss1
             loss2 += args["Training"]["w_MPDI"]*MPDI_loss2
@@ -349,7 +349,8 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
 #     D1s = []
 
     D1=0
-    
+    ce_loss_base = 0
+    ce_loss1 = 0    
     VD_runningmean = player.VD_runningmean
     VD_runningmeans = []
     
@@ -405,21 +406,24 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
 #         prob_play_chosen = torch.exp(player.logits_play[i])/Z
 #         prob_play_chosen = prob_play_chosen.gather(1, Variable(player.actions[i]))
         
+                    
         policy_loss1 = policy_loss1 - \
-            player.log_probs1[i] * \
-            gae1
-        ce_loss1 = -0.1*torch.sum(player.probs_base[i].detach()*torch.log(player.probs1[i]))*(abs(gae2)/(abs(gae1)+abs(gae2)))
+            player.log_probs1[i] * gae1
+            #(gae1*abs(gae1)/(abs(gae1)+abs(gae2)))
+#         policy_loss1 = policy_loss1*0
+#         ce_loss1 = -0.0*torch.sum(player.probs_base[i].detach()*torch.log(player.probs1[i]))*(abs(gae2)/(abs(gae1)+abs(gae2)))
+#         ce_loss1 = 0.5*((player.log_probs1[i] - torch.log(prob_base_chosen.detach()))**2)*((gae2**2)/(abs(gae1)+abs(gae2)))
         
         #+ 0.5*((player.log_probs1[i] - torch.log(prob_base_chosen.detach()))**2)*(abs(gae2)/(abs(gae1)+abs(gae2)))
 #         p_base.detach*ln(p1), а в лоссе а2 p_play.detach*ln(p1)
         #*gae2*(int(gae2>0))
                 #- 1*torch.sum(int(gae2>0)*player.probs_base[i].detach()*torch.log(player.probs1[i]))*gae2
         policy_loss_base = policy_loss_base - \
-            player.log_probs1_throughbase[i] * \
-            gae2 
-        ce_loss_base = -0.1*torch.sum(player.probs_play[i].detach()*torch.log(player.probs_throughbase[i]))*(abs(gae1)/(abs(gae1)+abs(gae2)))
+            player.log_probs1_throughbase[i] * gae2
+#             (gae2*abs(gae2)/(abs(gae1)+abs(gae2)))
+#         ce_loss_base = -0.0*torch.sum(player.probs_play[i].detach()*torch.log(player.probs_throughbase[i]))*(abs(gae1)/(abs(gae1)+abs(gae2)))
         
-        #+ 0.5*((player.log_probs1_throughbase[i] - torch.log(prob_play_chosen.detach()))**2)*(abs(gae1)/(abs(gae1)+abs(gae2)))
+#         ce_loss_base =0.0*((player.log_probs1_throughbase[i] - torch.log(prob_play_chosen.detach()))**2)*((gae1**2)/(abs(gae1)+abs(gae2)))
         
         #value loss
         V_last2 = gamma2 * V_last2 + ((1-gamma1)*(player.values1[i].detach()+D1))

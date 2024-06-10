@@ -142,8 +142,8 @@ class Level1(nn.Module):
 #         kl = -0.5*(1 + logvar - mu**2 - T.exp(logvar)).mean()
 
         z_t = self.N.sample(mu.shape)
-        self.z_EMA_t= z_t #self.z_EMA_t*self.gamma1 + z_t*(1-self.gamma1)
-        s = mu + T.exp(logvar / 2) * self.z_EMA_t
+#         self.z_EMA_t= z_t #self.z_EMA_t*self.gamma1 + z_t*(1-self.gamma1)
+        s = mu + T.exp(logvar / 2) * z_t #self.z_EMA_t
         
         kl = -0.5*(1 + logvar - mu**2 - T.exp(logvar)).mean() # + mu.detach()**2
 
@@ -224,9 +224,9 @@ class Actor2(nn.Module):
         z_t = self.N.sample(a_mean.shape)
 #         self.z_EMA_t = self.z_EMA_t*self.gamma1 + np.sqrt(1-self.gamma1**2)*z_t 
 #sqrt(1-g2^2)
-        self.z_EMA_t=self.z_EMA_t*self.gamma2 + z_t*np.sqrt(1-self.gamma2**2)
+#         self.z_EMA_t=self.z_EMA_t*self.gamma2 + z_t*np.sqrt(1-self.gamma2**2)
 
-        a = a_mean + T.exp(a_log_std) * self.z_EMA_t
+        a = a_mean + T.exp(a_log_std) * z_t #self.z_EMA_t
         
 #         if self.amean_not_set:
 #             self.a_mean = T.zeros_like(a)
@@ -319,8 +319,8 @@ class Level2(nn.Module):
         
         z_t = self.N.sample(mu.shape)
 #         self.z_EMA_t = self.z_EMA_t*self.gamma2 + np.sqrt(1-self.gamma2**2) * z_t 
-        self.z_EMA_t=self.z_EMA_t*self.gamma1 + z_t*(1-self.gamma1)
-        s = mu + T.exp(logvar / 2) * self.z_EMA_t
+#         self.z_EMA_t=self.z_EMA_t*self.gamma1 + z_t*(1-self.gamma1)
+        s = mu + T.exp(logvar / 2) * z_t #self.z_EMA_t
         
         kl = -0.5*(1 + logvar - mu**2 - T.exp(logvar)).mean() 
         # + mu.detach()**2
