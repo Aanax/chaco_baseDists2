@@ -138,7 +138,7 @@ if gpu_id >= 0:
     torch.cuda.manual_seed(args["Training"]["seed"])
 
 # model_path = "./trained_models/PongDeterministic-v4logs_a3c_united_FIX5_vaeMPDI_non_restricted_wmpdi05_eps_0.0_10__21.0.dat"
-model_path = "/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/Pong-v0logs_CHACO_f_v31_NDOkNoEnt_Pongv0_gaeMod_v1D1_fix3_V1adDel2_kldGaeModul_sa2runmen_clas2a2smean_a2gam2_gaeModulActors_004kld_kldmean_nokldA2_Gae2hevyside_var2_1CE_1lvlAbaseInLstm_nod2_noZEMA_Vbalanced_a_eps_0.0_2__-13.0.dat"
+model_path = "/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/Pong-v0logs_CHACO_f_v31_NDOkNoEnt_Pongv0_gaeMod_v1D1_fix3_V1adDel2_kldGaeModul_sa2runmen_clas2a2smean_a2gam2_gaeModulActors_004kld_kldmean_nokldA2_Gae2hevyside_var2_1CE_1lvlAbaseInLstm_nod2_noZEMA_LogsCE_fix_eps_0.0_3__-6.0.dat"
 
 # Pong-v0logs_CHACO_f_v31_NDOkNoEnt_Pongv0_b_dist_actor2kld_runmeanLvl1_fix_disbAC_00Mot_fix_gaeModul_32actor2_v1D1_fix3_demin2_V1adDel2_kldGaeModul_sa2runmen_fix_nossep_eps_0.0_5__2.0.dat"
 

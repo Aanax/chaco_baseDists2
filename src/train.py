@@ -1,17 +1,14 @@
-import os # file for train function
-os.environ["OMP_NUM_THREADS"] = "1"
-import time
-
 # file for train function
-from functools import wraps
-import torch.nn.functional as F #noqa
+import os
+
+os.environ["OMP_NUM_THREADS"] = "1"
 
 from setproctitle import setproctitle as ptitle
 import torch
 import csv
 import numpy as np
 from environment import atari_env
-from torch.autograd import Variable #noqa
+from torch.autograd import Variable # noqa
 from utils import ensure_shared_grads
 
 from models import Level1
@@ -19,8 +16,11 @@ from models import Level2
 
 from agents import Agent
 import torch.nn as nn
-
-
+import copy
+# file for train function
+from functools import wraps
+import torch.nn.functional as F #noqa
+import time
 
 
 def timing(f):
@@ -33,8 +33,6 @@ def timing(f):
         return result
 
     return wrap
-
-
 
 
 
@@ -134,7 +132,10 @@ def train(
     gamma2 = args["Training"]["initial_gamma2"]
     w_curiosity = float(args["Training"]["w_curiosity"])
     game_num = 0
+
     kld_loss_calc = _kld_loss_calc
+
+    ### LSTM STATES???
 
     while True:
         # on each run? we
@@ -152,8 +153,11 @@ def train(
         if player.done:
             player.reset_lstm_states()
         else:
+            #             if player.train_episodes_run>=4:
             player.detach_lstm_states(levels=[1, 2])  # ,2
-            
+        #             if player.train_episodes_run_2>=16:
+        #                 player.detach_lstm_states(levels=[2])
+
         # running simulation for num_steps
         for step in range(args["Training"]["num_steps"]):
             player.action_train()
@@ -220,6 +224,7 @@ def train(
 
 
         with torch.autograd.set_detect_anomaly(True):
+            adaptive = False
 
             losses = train_func(
                 player,
@@ -269,11 +274,13 @@ def train(
             loss1 += args["Training"]["w_MPDI"] * MPDI_loss1
             loss2 += args["Training"]["w_MPDI"] * MPDI_loss2
 
+
             mean_V1 = torch.mean(torch.Tensor(player.values1)).cpu().numpy()
             mean_V2 = torch.mean(torch.Tensor(player.values2)).cpu().numpy()
             mean_re1 = float(np.mean(player.rewards1))
 
             additional_logs = []
+
             for loss_i in losses:
                 if not (loss_i == 0):
                     additional_logs.append(loss_i.item())
@@ -400,7 +407,7 @@ def train_A3C_united(
             player, V_last2, S_last2, tau, gamma2, None, i
         )
         r1_bonus = 0.00 * torch.sum(delta_S1.pow(2)) / (max(delta_S1.size()))
-
+        ##+ delta_t2 ?
         delta_t1 = (
             player.rewards1[i]
             + r1_bonus
@@ -439,6 +446,7 @@ def train_A3C_united(
         policy_loss1 = policy_loss1 - player.log_probs1[i] * gae1
 
         policy_loss_base = policy_loss_base - player.log_probs1_throughbase[i] * gae2
+
 
         # value loss
         V_last2 = gamma2 * V_last2 + ((1 - gamma1) * (player.values1[i].detach() + D1))
