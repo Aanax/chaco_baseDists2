@@ -304,6 +304,11 @@ class Agent(object):
         self.a1_prev = a1.detach()
         self.a2_prev = a2.detach()
         
+        self.alphas1.append(alpha1)
+        self.alphas2.append(alpha2)
+        self.alpha1 = alpha1
+        self.alpha2 = alpha2
+        
         self.last_S = S1
         self.last_S2 = S2
         self.last_v = v1
