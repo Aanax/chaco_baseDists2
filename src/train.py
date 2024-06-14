@@ -395,35 +395,17 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         restoration_loss1+= restoration_loss1_part*(abs(gae1) + abs(gae2))
         restoration_loss2+= restoration_loss2_part*abs(gae2.item())
         
-#         Z = (torch.exp(player.logits1[i])/F.softmax(player.logits1[i], dim=1)).squeeze()[0].detach()
-        
-        prob_base_chosen = F.softmax(player.logits_base[i], dim=1)
-#         prob_base_chosen = torch.exp(player.logits_base[i])/Z
-        prob_base_chosen = prob_base_chosen.gather(1, Variable(player.actions[i]))
-#         prob_1_chosen = F.softmax(player.logits1[i], dim=1)
-#         prob_1_chosen = prob_1_chosen.gather(1, Variable(player.actions[i]))
-        prob_play_chosen = F.softmax(player.logits_play[i], dim=1)
-#         prob_play_chosen = torch.exp(player.logits_play[i])/Z
-        prob_play_chosen = prob_play_chosen.gather(1, Variable(player.actions[i]))
-        
                     
         policy_loss1 = policy_loss1 - \
             player.log_probs1[i] * gae1
-#             (gae1*abs(gae1)/(abs(gae1)+abs(gae2)+0.001))
-#         policy_loss1 = policy_loss1*0
-#         ce_loss1 = -0.0*torch.sum(player.probs_base[i].detach()*torch.log(player.probs1[i]))*(abs(gae2)/(abs(gae1)+abs(gae2)))
-        ce_loss1 += 0.1*((player.log_probs1[i] - torch.log(prob_base_chosen.detach()))**2)*(abs(player.values2[i].detach())/(abs(player.values1[i].detach()) + abs(player.values2[i].detach())+0.001))
-        
-        #+ 0.5*((player.log_probs1[i] - torch.log(prob_base_chosen.detach()))**2)*(abs(gae2)/(abs(gae1)+abs(gae2)))
-#         p_base.detach*ln(p1), а в лоссе а2 p_play.detach*ln(p1)
-        #*gae2*(int(gae2>0))
-                #- 1*torch.sum(int(gae2>0)*player.probs_base[i].detach()*torch.log(player.probs1[i]))*gae2
+
+        ce_loss1 += -0.1*(torch.sum(player.probs_base[i].detach()*torch.log(player.probs1[i])))*(abs(player.values2[i].detach()))*abs(gae1)
+
         policy_loss_base = policy_loss_base - \
             player.log_probs1_throughbase[i] * gae2
-#             (gae2*abs(gae2)/(abs(gae1)+abs(gae2)+0.001))
-#         ce_loss_base = -0.0*torch.sum(player.probs_play[i].detach()*torch.log(player.probs_throughbase[i]))*(abs(gae1)/(abs(gae1)+abs(gae2)))
+
         
-        ce_loss_base += 0.1*((player.log_probs1_throughbase[i] - torch.log(prob_play_chosen.detach()))**2)* (abs(player.values1[i].detach())/(abs(player.values1[i].detach()) + abs(player.values2[i].detach())+0.001))
+        ce_loss_base += -0.1*(torch.sum(player.probs_play[i].detach()*torch.log(player.probs_throughbase[i])))*(abs(player.values1[i].detach()))*abs(gae2)
         
         #value loss
         V_last2 = gamma2 * V_last2 + ((1-gamma1)*(player.values1[i].detach()+D1))
