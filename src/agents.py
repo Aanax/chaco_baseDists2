@@ -128,14 +128,14 @@ class Agent(object):
 
             kld2, x_restored2, v2, a2, a_base, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2((S1.detach(), self.hx2, self.cx2))
             
-            a = a1 + a_base.detach()
+            a = 0*a1 + a_base.detach()
 
 #             alpha1 = (abs(v1)/(abs(v1)+abs(v2)+0.001)).detach()
 #             alpha2 = (abs(v2)/(abs(v1)+abs(v2)+0.001)).detach()
             
 #             a = alpha1*a1 + alpha2*a_base.detach()
     
-            a_throughbase = a1.detach() + a_base
+            a_throughbase = 0*a1.detach() + a_base
 
 #             a_throughbase = alpha1*a1.detach() + alpha2*a_base
             
@@ -279,7 +279,7 @@ class Agent(object):
 
             kld2, x_restored2, v2, a2, a_base, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2((S1, self.hx2, self.cx2))
             
-            a = a1 + a_base*int(not ZERO_ABASE)
+            a = 0*a1 + a_base*int(not ZERO_ABASE)
             
     
 #             alpha1 = abs(v1)/(abs(v1)+abs(v2)+0.001)
