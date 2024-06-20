@@ -343,39 +343,24 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
     restoration_loss2=0
     CE_loss = nn.CrossEntropyLoss()
     r1_bonus = 0 
-    
-    
-#     V1_runningmean = 0
-#     D1s = []
 
     D1=0
-    ce_loss_base = 0
-    ce_loss1 = 0    
     VD_runningmean = player.VD_runningmean
     VD_runningmeans = []
+    ce_loss1 = 0
+    ce_loss_base=0
     
     T = len(player.rewards1)
-    
-#     for i in range(T):
-# #         D1 = r_i + g*r_i+1 + g^2*r_i+2 + ... + g^(T-i-1)*r_(T-1) + g^(T-i)*V1_T
-#         D1 = sum([player.rewards1[i+k]*(gamma1**k) for k in range(0, T-i)]) + (gamma1**(T-i))*V_last1.detach()
-#         VD_runningmean = VD_runningmean*gamma1 + (D1)*(1-gamma1)
-#         VD_runningmeans.append(VD_runningmean)
-        
-#     player.VD_runningmean = VD_runningmean
     
     for i in reversed(range(len(player.rewards1))):
         #restoration_loss
         # FIXME. backwards in every agent_train call
         S_last1, part_S_loss1, delta_S1 = MPDI_loss_calc1(player, V_last1, S_last1, tau, gamma1, None, i)
         S_last2, part_S_loss2 = MPDI_loss_calc2(player, V_last2, S_last2, tau, gamma2, None, i)
-        r1_bonus = 0.00*torch.sum(delta_S1.pow(2))/(max(delta_S1.size()))
         ##+ delta_t2 ?
         delta_t1 = player.rewards1[i]+r1_bonus + gamma1 * \
             player.values1[i + 1].data - player.values1[i].data
         
-#         D1 = D1*gamma1 + delta_t1
-
         # Generalized Advantage Estimataion
         delta_t2 = player.rewards1[i] + gamma2 * \
             player.values2[i + 1].data - player.values2[i].data
@@ -386,7 +371,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         
         #KL loss
         kld_delta1, kld_delta2 = kld_loss_calc(player, i)
-        kld_loss1+=kld_delta1**(abs(gae1) + abs(gae2))
+        kld_loss1+=kld_delta1*(abs(gae1) + abs(gae2))
         kld_loss2+=kld_delta2*abs(gae2)
         kld_loss_actor2 += player.klds_actor2[i]*abs(gae2)   
         
@@ -399,15 +384,8 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         policy_loss1 = policy_loss1 - \
             player.log_probs1[i] * gae1
 
-#         ce_loss1 += -0.1*(torch.sum(player.probs_base[i].detach()*torch.log(player.probs1[i])))*(abs(player.values2[i].detach()))*abs(gae2) + \
-#         -0.1*torch.sum(player.probs1[i].detach()*torch.log(player.probs_play[i]))*(abs(player.values1[i].detach()))*abs(gae1)
-
         policy_loss_base = policy_loss_base - \
             player.log_probs1_throughbase[i] * gae2
-
-        
-#         ce_loss_base += -0.1*(torch.sum(player.probs_play[i].detach()*torch.log(player.probs_throughbase[i])))*(abs(player.values1[i].detach()))*abs(gae1) + \
-#         -0.1*torch.sum(player.probs_throughbase[i].detach()*torch.log(player.probs_base[i]))*(abs(player.values2[i].detach()))*abs(gae2)
         
         #value loss
         V_last2 = gamma2 * V_last2 + player.rewards1[i] #((1-gamma1)*(player.values1[i].detach()+D1))
