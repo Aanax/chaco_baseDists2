@@ -203,7 +203,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 
             loss1 += args["Training"]["w_kld"]*kld_loss1
             loss2 += args["Training"]["w_kld"]*kld_loss2
-            loss2 += 0.000*kld_loss_actor2 #args["Training"]["w_kld"]*
+            loss2 += 0.1*kld_loss_actor2 #args["Training"]["w_kld"]*
 
             loss1 += args["Training"]["w_MPDI"]*MPDI_loss1
             loss2 += args["Training"]["w_MPDI"]*MPDI_loss2
