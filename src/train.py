@@ -382,7 +382,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         delta_t2 = (1-gamma1)*(player.values1[i].detach()+D1) + gamma2 * \
             player.values2[i + 1].data - player.values2[i].data
         
-        D2 = D2*gamma2 + delta_t2
+#         D2 = D2*gamma2 + delta_t2
         
         gae1 = gae1 * gamma1 * tau + (delta_t1)
         gae2 = gae2 * gamma2 * tau + (delta_t2) # delta_t1 + 
@@ -404,15 +404,27 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         policy_loss1 = policy_loss1 - \
             player.log_probs1[i] * gae1
 
-        ce_loss1 += -0.1*(torch.sum(player.probs_base[i].detach()*torch.log(player.probs1[i])))*(abs(player.values2[i].detach()+D2))*abs(gae2) + \
-        -0.1*torch.sum(player.probs1[i].detach()*torch.log(player.probs_play[i]))*(abs(player.values1[i].detach()+D1))*abs(gae1)
+        ce_loss1 += -0.5*(
+            torch.sum(
+                player.probs_base[i].detach()*torch.log(player.probs1[i])
+            )
+        )*(abs(player.values2[i].detach())) + \
+        -0.1*torch.sum(
+            player.probs1[i].detach()*torch.log(player.probs_play[i])
+        )*(abs(player.values1[i].detach())) #*abs(gae2) #*abs(gae1)
 
         policy_loss_base = policy_loss_base - \
             player.log_probs1_throughbase[i] * gae2
 
         
-        ce_loss_base += -0.1*(torch.sum(player.probs_play[i].detach()*torch.log(player.probs_throughbase[i])))*(abs(player.values1[i].detach()+D1))*abs(gae1) + \
-        -0.1*torch.sum(player.probs_throughbase[i].detach()*torch.log(player.probs_base[i]))*(abs(player.values2[i].detach()+D2))*abs(gae2)
+        ce_loss_base += -0.5*(
+            torch.sum(
+                player.probs_play[i].detach()*torch.log(player.probs_throughbase[i])
+            )
+        )*(abs(player.values1[i].detach())) + \
+        -0.1*torch.sum(
+            player.probs_throughbase[i].detach()*torch.log(player.probs_base[i])
+        )*(abs(player.values2[i].detach())) #*abs(gae1) #*abs(gae2)
         
         #value loss
         V_last2 = gamma2 * V_last2 + ((1-gamma1)*(player.values1[i].detach()+D1))
