@@ -409,7 +409,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
                 player.probs_base[i].detach()*torch.log(player.probs1[i])
             )
         )*(abs(player.values2[i].detach())+abs(D2)) + \
-        -0.1*torch.sum(
+        -0.5*torch.sum(
             player.probs1[i].detach()*torch.log(player.probs_play[i])
         )*(abs(player.values1[i].detach())+abs(D1))#*abs(gae2) #*abs(gae1)
 
@@ -422,7 +422,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
                 player.probs_play[i].detach()*torch.log(player.probs_throughbase[i])
             )
         )*(abs(player.values1[i].detach())+abs(D1)) + \
-        -0.1*torch.sum(
+        -0.5*torch.sum(
             player.probs_throughbase[i].detach()*torch.log(player.probs_base[i])
         )*(abs(player.values2[i].detach())+abs(D2))#*abs(gae1) #*abs(gae2)
         
