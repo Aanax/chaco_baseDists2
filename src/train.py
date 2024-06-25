@@ -198,7 +198,8 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             losses = train_func(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, gamma2, w_curiosity, kld_loss_calc)
 
             kld_loss1, policy_loss1, value_loss1, MPDI_loss1, kld_loss2, policy_loss2, value_loss2, MPDI_loss2, policy_loss_base, kld_loss_actor2, loss_restoration1,loss_restoration2, ce_loss1, ce_loss_base = losses
-            loss1 = (args["Training"]["w_policy"]*policy_loss1+args["Training"]["w_value"]*value_loss1 + args["Training"]["w_policy"]*ce_loss1)
+            #
+            loss1 = (args["Training"]["w_value"]*value_loss1 + args["Training"]["w_policy"]*policy_loss1+ args["Training"]["w_policy"]*ce_loss1)
             loss2 = (args["Training"]["w_policy"]*policy_loss2+args["Training"]["w_value"]*value_loss2 + args["Training"]["w_policy"]*policy_loss_base + args["Training"]["w_policy"]*ce_loss_base)
 
             loss1 += args["Training"]["w_kld"]*kld_loss1
@@ -366,18 +367,18 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
             player.values2[i + 1].data - player.values2[i].data
         gae1 = gae1 * gamma1 * tau + (delta_t1)
         gae2 = gae2 * gamma2 * tau + (delta_t2) # delta_t1 + 
-        S_loss1 += part_S_loss1*(abs(gae1) + abs(gae2)) #*abs(gae1)
+        S_loss1 += part_S_loss1*(abs(gae2)) #*abs(gae1)
         S_loss2 += part_S_loss2*abs(gae2)
         
         #KL loss
         kld_delta1, kld_delta2 = kld_loss_calc(player, i)
-        kld_loss1+=kld_delta1*(abs(gae1) + abs(gae2))
+        kld_loss1+=kld_delta1*(abs(gae2))
         kld_loss2+=kld_delta2*abs(gae2)
         kld_loss_actor2 += player.klds_actor2[i]*abs(gae2)   
         
         restoration_loss1_part = (player.restoreds1[i] - player.restore_labels1[i]).pow(2).sum()/ 20
         restoration_loss2_part = (player.restoreds2[i] - player.restore_labels2[i]).pow(2).sum()/ 20
-        restoration_loss1+= restoration_loss1_part*(abs(gae1) + abs(gae2))
+        restoration_loss1+= restoration_loss1_part*(abs(gae2))
         restoration_loss2+= restoration_loss2_part*abs(gae2.item())
         
                     
