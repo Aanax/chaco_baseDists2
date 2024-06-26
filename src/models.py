@@ -311,7 +311,8 @@ class Level2(nn.Module):
         self.z_EMA_t = 0
         
     def forward(self, x):
-        x, hx2, cx2 = x
+        x, s1, hx2, cx2 = x
+        x = x + s1
         x = self.Layernorm(x)
         x = F.relu(self.maxp1(self.conv1(x)))
         mu = self.maxp2(self.conv2(x))
