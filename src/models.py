@@ -189,7 +189,7 @@ class Actor2(nn.Module):
     def __init__(self, args, device = "cpu"):
         super(Actor2, self).__init__()
         self.action_mu = nn.Linear(64*5*5, 8)
-        self.action_std = nn.Linear(64*5*5, 8)
+#         self.action_std = nn.Linear(64*5*5, 8)
         self.gamma2 = float(args["Training"]["initial_gamma2"])
 #         self.action_mu.weight.data = norm_col_init(
 #         self.action_mu.weight.data, args["a_init_std"]/4)
@@ -208,12 +208,12 @@ class Actor2(nn.Module):
     def forward(self, S):
         
         a_mean = self.action_mu(T.clone(S)) #prediction form network
-        a_log_std = self.action_std(T.clone(S)) #prediction form network
+#         a_log_std = self.action_std(T.clone(S)) #prediction form network
         
 #         a_log_std = T.clamp(a_log_std, min=-20, max=2)
         
 #         s = mu + T.exp(logvar / 2) * self.N.sample(mu.shape)
-        kl2 = -0.5*(1 + 2*a_log_std - a_mean**2 - T.exp(2*a_log_std)).mean()
+        kl2 = 0 #-0.5*(1 + 2*a_log_std - a_mean**2 - T.exp(2*a_log_std)).mean()
     
 #         kl2 = kl2/8
     
@@ -221,12 +221,12 @@ class Actor2(nn.Module):
 #         dist = Normal(a_mean, std)
 
 #         a = dist.rsample()
-        z_t = self.N.sample(a_mean.shape)
+#         z_t = self.N.sample(a_mean.shape)
 #         self.z_EMA_t = self.z_EMA_t*self.gamma1 + np.sqrt(1-self.gamma1**2)*z_t 
 #sqrt(1-g2^2)
 #         self.z_EMA_t=self.z_EMA_t*self.gamma2 + z_t*np.sqrt(1-self.gamma2**2)
 
-        a = a_mean + T.exp(a_log_std) * z_t #self.z_EMA_t
+        a = a_mean # + T.exp(a_log_std) * z_t #self.z_EMA_t
         
 #         if self.amean_not_set:
 #             self.a_mean = T.zeros_like(a)
