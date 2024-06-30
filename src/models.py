@@ -335,7 +335,7 @@ class Level2(nn.Module):
 
         hx, cx = self.ConvLSTM_mu(s, (hx2,cx2))#(states[0][0][0],states[0][1][0]))
 
-        S = self.oracle(hx)
+        S = self.oracle(hx.detach())
         z = hx.view(hx.size(0), -1)
         v = self.critic(z)
         a, entropy2, log_prob2, kl_actor2 = self.actor(z)
