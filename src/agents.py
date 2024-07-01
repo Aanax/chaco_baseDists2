@@ -126,7 +126,7 @@ class Agent(object):
             
 #             self.V1_runningmean = self.V1_runningmean*self.gamma1 + (1-self.gamma1)*v1.detach()
 
-            kld2, x_restored2, v2, a2, a_base, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2((S1.detach(), self.hx2, self.cx2))
+            kld2, x_restored2, v2, a2, a_base, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2((S1, self.hx2, self.cx2))
             
             a = 0*a1 + a_base.detach()
 
