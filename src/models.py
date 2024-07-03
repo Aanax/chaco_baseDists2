@@ -188,9 +188,11 @@ class Oracle2(nn.Module):
 class Actor2(nn.Module):
     def __init__(self, args, device = "cpu"):
         super(Actor2, self).__init__()
-        self.action_mu = nn.Linear(64*5*5, 8)
+        self.a2 = nn.Linear(64*5*5, 8)
+        self.a2.weight.data = norm_col_init(
+        self.a2.weight.data, 1)
 #         self.action_std = nn.Linear(64*5*5, 8)
-        self.gamma2 = float(args["Training"]["initial_gamma2"])
+#         self.gamma2 = float(args["Training"]["initial_gamma2"])
 #         self.action_mu.weight.data = norm_col_init(
 #         self.action_mu.weight.data, args["a_init_std"]/4)
 #         self.action_mu.bias.data.fill_(0)
@@ -207,7 +209,7 @@ class Actor2(nn.Module):
 
     def forward(self, S):
         
-        a_mean = self.action_mu(T.clone(S)) #prediction form network
+        a_mean = self.a2(T.clone(S)) #prediction form network
 #         a_log_std = self.action_std(T.clone(S)) #prediction form network
         
 #         a_log_std = T.clamp(a_log_std, min=-20, max=2)
@@ -279,8 +281,9 @@ class Level2(nn.Module):
             self.apply(init_base)
             
         relu_gain = nn.init.calculate_gain('relu')
+#         self.actor_base.weight.data *= args["Model"]["a_init_std"]
         self.actor_base.weight.data = norm_col_init(
-        self.actor_base.weight.data, args["Model"]["a_init_std"])
+        self.actor_base.weight.data, args["Model"]["a_init_std"]) #/np.sqrt(8)
         self.actor_base.bias.data.fill_(0)
         
 #         self.conv1.weight.data.mul_(relu_gain)
