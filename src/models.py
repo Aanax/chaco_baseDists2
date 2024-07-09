@@ -115,19 +115,19 @@ class Level1(nn.Module):
         self.critic.bias.data.fill_(0) 
         
         self.oracle.conv1.weight.data = self.oracle.conv1.weight.data*args["Model"]["S_init_std_multiplier"]
-        for name, p in self.named_parameters():
-            if "lstm" in name:
-                if ("weight_ih" in name) or ("t_layer.weight" in name):
-                    nn.init.xavier_uniform_(p.data, gain=args["Model"]["lstm_init_gain"])
-                elif ("weight_hh" in name) or ("pre_t_layer.weight" in name):
-                    nn.init.orthogonal_(p.data)
-                elif ("bias_ih" in name) or ("t_layer.bias" in name):
-                    p.data.fill_(0)
-                    # Set forget-gate bias to 1
-                    n = p.size(0)
-                    p.data[(n // 4) : (n // 2)].fill_(1)
-                elif ("bias_hh" in name) or ("pre_t_layer.bias" in name):
-                    p.data.fill_(0)
+#         for name, p in self.named_parameters():
+#             if "lstm" in name:
+#                 if ("weight_ih" in name) or ("t_layer.weight" in name):
+#                     nn.init.xavier_uniform_(p.data, gain=args["Model"]["lstm_init_gain"])
+#                 elif ("weight_hh" in name) or ("pre_t_layer.weight" in name):
+#                     nn.init.orthogonal_(p.data)
+#                 elif ("bias_ih" in name) or ("t_layer.bias" in name):
+#                     p.data.fill_(0)
+#                     # Set forget-gate bias to 1
+#                     n = p.size(0)
+#                     p.data[(n // 4) : (n // 2)].fill_(1)
+#                 elif ("bias_hh" in name) or ("pre_t_layer.bias" in name):
+#                     p.data.fill_(0)
         self.train()
         self.z_EMA_t = 0
 
@@ -188,7 +188,8 @@ class Oracle2(nn.Module):
 class Actor2(nn.Module):
     def __init__(self, args, device = "cpu"):
         super(Actor2, self).__init__()
-        self.action_mu = nn.Linear(64*5*5, 8)
+        self.a2 = nn.Linear(64*5*5, 8)
+        self.a2.weight.data = norm_col_init(self.a2.weight.data,1)
 #         self.action_std = nn.Linear(64*5*5, 8)
         self.gamma2 = float(args["Training"]["initial_gamma2"])
 #         self.action_mu.weight.data = norm_col_init(
@@ -207,7 +208,7 @@ class Actor2(nn.Module):
 
     def forward(self, S):
         
-        a_mean = self.action_mu(T.clone(S)) #prediction form network
+        a_mean = self.a2(T.clone(S)) #prediction form network
 #         a_log_std = self.action_std(T.clone(S)) #prediction form network
         
 #         a_log_std = T.clamp(a_log_std, min=-20, max=2)
@@ -333,7 +334,7 @@ class Level2(nn.Module):
             
 #         self.s_mean = self.s_mean.detach()*(self.gamma1)+s*(1-self.gamma1**2) 
 
-        hx, cx = self.ConvLSTM_mu(s, (hx2,cx2))#(states[0][0][0],states[0][1][0]))
+        hx, cx = self.ConvLSTM_mu(s, (hx2,cx2)) #(states[0][0][0],states[0][1][0]))
 
         S = self.oracle(hx)
         z = hx.view(hx.size(0), -1)

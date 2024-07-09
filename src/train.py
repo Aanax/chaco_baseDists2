@@ -438,9 +438,9 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
     kld_loss1 = kld_loss1/len(player.klds1)
     kld_loss2 = kld_loss2/len(player.klds2)
     if not (type(S_loss1)==int):
-        S_loss1 = torch.mean(S_loss1)
+        S_loss1 = torch.sum(S_loss1)* (1/np.sqrt(max(S_loss1.shape)))
     if not (type(S_loss2)==int):
-        S_loss2 = torch.mean(S_loss2)
+        S_loss2 = torch.sum(S_loss2)* (1/np.sqrt(max(S_loss2.shape)))
     return kld_loss1, policy_loss1, value_loss1, S_loss1, kld_loss2, policy_loss2, value_loss2, S_loss2, policy_loss_base, kld_loss_actor2, restoration_loss1, restoration_loss2, ce_loss1, ce_loss_base
 
     
