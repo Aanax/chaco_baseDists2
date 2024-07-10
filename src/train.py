@@ -169,9 +169,10 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
         if not player.done:
             state = player.state
             kld1, x_restored1, v1, a1, hx1, cx1, s1, S1 = player.model1((Variable(
-            state.unsqueeze(0)), player.hx1, player.cx1, player.prev_action_logits.detach()))
+            state.unsqueeze(0)), player.hx1, player.cx1, player.prev_action_logits.detach(),
+                                                                         player.prev_action1_logits.detach()))
             
-            kld2, x_restored2, v2, a2, a_base, hx2, cx2, s2, S2, ents, logprobs2, kld_actor2 = player.model2((S1.detach(), player.hx2,player.cx2,)
+            kld2, x_restored2, v2, a2, a_base, hx2, cx2, s2, S2, ents, logprobs2, kld_actor2 = player.model2((S1.detach(), player.hx2,player.cx2, player.prev_action2_logits.detach())
                                                                  )
             player.train_episodes_run+=1
             V_last1 = v1.detach()
@@ -179,18 +180,6 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             S_last1 = S1.detach()
             S_last2 = S2.detach()
             
-        
-#             if local_counter%10000==0:
-#                 try:
-#                     os.mkdir("./"+args["Training"]["log_dir"]+"/restored_images/")
-#                 except:
-#                     pass
-#                 if not (x_restored1 is None):
-#                     x_rest = x_restored1.detach().cpu().numpy()[0]
-#                     img_rest = ((np.rollaxis(x_rest,0,3)*env.unbiased_std+env.unbiased_mean)).astype("uint8")
-#                     cv2.imwrite("./"+args["Training"]["log_dir"]+"/restored_images/"+str(local_counter)+"_agent_"+str(rank)+"restored.png", img_rest)
-#                     img_rest = ((np.rollaxis(x_rest,0,3))).astype("uint8")
-#                     cv2.imwrite("./"+args["Training"]["log_dir"]+"/restored_images/"+str(local_counter)+"_agent_"+str(rank)+"_dummy_restored.png", img_rest)
             
         with torch.autograd.set_detect_anomaly(True):
             adaptive = False
@@ -207,10 +196,6 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 
             loss1 += args["Training"]["w_MPDI"]*MPDI_loss1
             loss2 += args["Training"]["w_MPDI"]*MPDI_loss2
-            
-#             loss_restoration1 = sum(player.restorelosses1)
-#             loss_restoration2 = sum(player.restorelosses2)
-            
 
 
             mean_V1 = torch.mean(torch.Tensor(player.values1)).cpu().numpy()
@@ -218,46 +203,12 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             mean_re1 = float(np.mean(player.rewards1))
 
             additional_logs = []
-    #         if args["Model"]["Decoder"] != "None":
-    #             mean_restoration_loss = float(np.mean(player.restoration_losses))
-    #             additional_logs.append(mean_restoration_loss)
 
-    
-#             1.7188516, meanv1
-#         6.99612, meanv2
-#         0.0, meanre
-#         1084724, counter
-#         140119, local
-#         2.19533371925354, kld1
-#         -0.00039930507773533463, pol1
-#         22.583087921142578, val1
-#         2068.730712890625,MPDI1
-#         107875.1015625, kld
-#         "tensor([[0.]], device='cuda:2', grad_fn=<SubBackward0>)", pol
-#         7.549724102020264, value
-#         150723552.0 MPDI
-
-# 0.004351678,
-# -0.17738782,
-# 0.0,
-# 1404361,
-# 181714,
-# 0.6414650082588196,kld
-# -0.5642889738082886,pol
-# 0.009280215948820114,val
-# 39.92879104614258, mpdi1
-# 0.3495332598686218, kld
-# -3.1613361835479736,pol
-# 0.08269035816192627,val
-# 334.5723876953125 mpdi
             for loss_i in losses:
                 if not (loss_i == 0):
                     additional_logs.append(loss_i.item())
                 else:
                     additional_logs.append(loss_i)
-
-#             additional_logs.append(loss_restoration2)
-#             additional_logs.append(loss_restoration1)
             
             f = open(STATS_CSV_PATH, 'a')
             writer = csv.writer(f)
@@ -331,10 +282,10 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
     policy_loss2 = 0
     policy_loss_base = 0
     value_loss2 = 0
-    gae2 = torch.zeros(1, 1)
-    if player.gpu_id >= 0:
-        with torch.cuda.device(player.gpu_id):
-            gae2 = gae2.cuda()
+#     gae2 = torch.zeros(1, 1)
+#     if player.gpu_id >= 0:
+#         with torch.cuda.device(player.gpu_id):
+#             gae2 = gae2.cuda()
     kld_loss2 = 0
     S_loss2 = 0
     kld_loss_actor2 = 0
@@ -343,10 +294,6 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
     restoration_loss2=0
     CE_loss = nn.CrossEntropyLoss()
     r1_bonus = 0 
-    
-    
-#     V1_runningmean = 0
-#     D1s = []
 
     D1=0
     D2=0
@@ -356,14 +303,6 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
     VD_runningmeans = []
     
     T = len(player.rewards1)
-    
-#     for i in range(T):
-# #         D1 = r_i + g*r_i+1 + g^2*r_i+2 + ... + g^(T-i-1)*r_(T-1) + g^(T-i)*V1_T
-#         D1 = sum([player.rewards1[i+k]*(gamma1**k) for k in range(0, T-i)]) + (gamma1**(T-i))*V_last1.detach()
-#         VD_runningmean = VD_runningmean*gamma1 + (D1)*(1-gamma1)
-#         VD_runningmeans.append(VD_runningmean)
-        
-#     player.VD_runningmean = VD_runningmean
     
     for i in reversed(range(len(player.rewards1))):
         #restoration_loss
@@ -384,25 +323,25 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         
         D2 = D2*gamma2 + delta_t2
         
-        gae1 = gae1 * gamma1 * tau + (delta_t1)
-        gae2 = gae2 * gamma2 * tau + (delta_t2) # delta_t1 + 
-        S_loss1 += part_S_loss1*(abs(gae1) + abs(gae2)) #*abs(gae1)
-        S_loss2 += part_S_loss2*abs(gae2)
+        S_loss1 += part_S_loss1*(abs(D1) + abs(D2)) #*abs(gae1)
+        S_loss2 += part_S_loss2*abs(D2)
         
         #KL loss
         kld_delta1, kld_delta2 = kld_loss_calc(player, i)
-        kld_loss1+=kld_delta1*(abs(gae1) + abs(gae2))
-        kld_loss2+=kld_delta2*abs(gae2)
-        kld_loss_actor2 += player.klds_actor2[i]*abs(gae2)   
+        kld_loss1+=kld_delta1*(abs(D1) + abs(D2))
+        kld_loss2+=kld_delta2*abs(D2)
+        kld_loss_actor2 += player.klds_actor2[i]*abs(D2)   
         
         restoration_loss1_part = (player.restoreds1[i] - player.restore_labels1[i]).pow(2).sum()/ 20
         restoration_loss2_part = (player.restoreds2[i] - player.restore_labels2[i]).pow(2).sum()/ 20
-        restoration_loss1+= restoration_loss1_part*(abs(gae1) + abs(gae2))
-        restoration_loss2+= restoration_loss2_part*abs(gae2.item())
+        restoration_loss1+= restoration_loss1_part*(abs(D1) + abs(D2))
+        restoration_loss2+= restoration_loss2_part*abs(D2.item())
         
+        V1_corr = player.values1[i].detach()+D1
+        V2_corr = player.values2[i].detach()+D2
                     
         policy_loss1 = policy_loss1 - \
-            player.log_probs1[i] * gae1
+            player.log_probs1[i] * D1 * abs(V1_corr)
 
         ce_loss1 += -0.5*(
             torch.sum(
@@ -411,10 +350,10 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         )*(abs(player.values2[i].detach()+D2)) + \
         -0.5*torch.sum(
             player.probs1[i].detach()*torch.log(player.probs_play[i])
-        )*(abs(player.values1[i].detach()+D1))#*abs(gae2) #*abs(gae1)
+        )*(abs(player.values1[i].detach()+D1))
 
         policy_loss_base = policy_loss_base - \
-            player.log_probs1_throughbase[i] * gae2
+            player.log_probs1_throughbase[i] * D2 * abs(V2_corr)
 
         
         ce_loss_base += -0.5*(
@@ -424,7 +363,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         )*(abs(player.values1[i].detach()+D1)) + \
         -0.5*torch.sum(
             player.probs_throughbase[i].detach()*torch.log(player.probs_base[i])
-        )*(abs(player.values2[i].detach()+D2))#*abs(gae1) #*abs(gae2)
+        )*(abs(player.values2[i].detach()+D2))
         
         #value loss
         V_last2 = gamma2 * V_last2 + ((1-gamma1)*(player.values1[i].detach()+D1))

@@ -48,6 +48,8 @@ class Agent(object):
         self.a2_prev = torch.zeros((1,4)).to("cuda:"+str(gpu_id))
         
         self.prev_action_logits = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
+        self.prev_action1_logits = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
+        self.prev_action2_logits = torch.zeros((1,8)).to("cuda:"+str(gpu_id))
 
 
         self.train_episodes_run_2 =0
@@ -116,7 +118,8 @@ class Agent(object):
         
         with torch.autograd.set_detect_anomaly(True):
             kld1, x_restored1, v1, a1, self.hx1, self.cx1, s1, S1 = self.model1((Variable(
-                self.state.unsqueeze(0)),self.hx1, self.cx1, self.prev_action_logits.detach()))
+                self.state.unsqueeze(0)),self.hx1, self.cx1, self.prev_action_logits.detach(),
+                                                            self.prev_action1_logits.detach()))
             
 #             self.S1_runningmean = self.S1_runningmean*self.gamma1 + S1.detach()*(1-self.gamma1)
             
@@ -126,7 +129,7 @@ class Agent(object):
             
 #             self.V1_runningmean = self.V1_runningmean*self.gamma1 + (1-self.gamma1)*v1.detach()
 
-            kld2, x_restored2, v2, a2, a_base, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2((S1.detach(), self.hx2, self.cx2))
+            kld2, x_restored2, v2, a2, a_base, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2((S1.detach(), self.hx2, self.cx2,  self.prev_action2_logits.detach()))
             
             a = a1 + a_base.detach()
 
@@ -143,6 +146,8 @@ class Agent(object):
             self.train_episodes_run_2+=1
             
             self.prev_action_logits = a_base
+            self.prev_action1_logits = a1
+            self.prev_action2_logits = a2
 
 #             restoration_loss1 = self.w_restoration * (x_restored1 - self.state.unsqueeze(0).detach()).pow(2).sum()/ self.batch_size
             
@@ -272,12 +277,12 @@ class Agent(object):
                 self.cx2 = self.cx2.data
             
             kld1, x_restored1, v1, a1, self.hx1, self.cx1, s1, S1 = self.model1((Variable(
-                self.state.unsqueeze(0)),self.hx1, self.cx1, self.prev_action_logits.detach()))
+                self.state.unsqueeze(0)),self.hx1, self.cx1, self.prev_action_logits.detach(), self.prev_action1_logits.detach()))
             
 #             self.S1_runningmean = self.S1_runningmean*self.gamma1 + S1.detach()*(1-self.gamma1)
 #             self.S1_runningmean = self.S1_runningmean*self.gamma1 + S1.detach()*(1-self.gamma1)
 
-            kld2, x_restored2, v2, a2, a_base, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2((S1, self.hx2, self.cx2))
+            kld2, x_restored2, v2, a2, a_base, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2((S1, self.hx2, self.cx2, self.prev_action2_logits.detach()))
             
             a = a1 + a_base*int(not ZERO_ABASE)
             
@@ -288,6 +293,8 @@ class Agent(object):
 #             a = alpha1*a1 + alpha2*a_base
             
             self.prev_action_logits = a_base
+            self.prev_action1_logits = a1
+            self.prev_action2_logits = a2
                 
         prob = F.softmax(a, dim=1)
         action = prob.max(1)[1].data.cpu().numpy()
