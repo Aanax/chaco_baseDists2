@@ -330,7 +330,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         kld_delta1, kld_delta2 = kld_loss_calc(player, i)
         kld_loss1+=kld_delta1*(abs(D1) + abs(D2))
         kld_loss2+=kld_delta2*abs(D2)
-        kld_loss_actor2 += player.klds_actor2[i]*abs(D2)   
+        kld_loss_actor2 += player.klds_actor2[i] #*abs(D2)   
         
         restoration_loss1_part = (player.restoreds1[i] - player.restore_labels1[i]).pow(2).sum()
         restoration_loss2_part = (player.restoreds2[i] - player.restore_labels2[i]).pow(2).sum()

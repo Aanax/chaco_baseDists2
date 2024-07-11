@@ -170,10 +170,16 @@ class Actor2(nn.Module):
 
         kl2 = -0.5*(1 + 2*a_log_std - a_mean**2 - T.exp(2*a_log_std)).mean()
 
-        z_t = self.N.sample(a_mean.shape)
-        self.z_EMA_t=self.z_EMA_t*self.gamma2 + z_t*np.sqrt(1-self.gamma2**2)
+#         z_t = self.N.sample(a_mean.shape)
+#         self.z_EMA_t=self.z_EMA_t*self.gamma2 + z_t*np.sqrt(1-self.gamma2**2)
 
-        a = a_mean + T.exp(a_log_std) * self.z_EMA_t
+#         a = a_mean + T.exp(a_log_std) * self.z_EMA_t
+        z_t = self.N.sample(a_mean.shape)
+        #         self.z_EMA_t = self.z_EMA_t*self.gamma1 + np.sqrt(1-self.gamma1**2)*z_t
+        # sqrt(1-g2^2)
+        #         self.z_EMA_t=self.z_EMA_t*self.gamma2 + z_t*np.sqrt(1-self.gamma2**2)
+
+        a = a_mean + T.exp(a_log_std) * z_t  # self.z_EMA_t
 
         log_probs2 = None #dist.log_prob(a)
         return a, None, log_probs2, kl2
