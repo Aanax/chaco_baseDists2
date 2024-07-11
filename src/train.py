@@ -332,8 +332,8 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         kld_loss2+=kld_delta2*abs(D2)
         kld_loss_actor2 += player.klds_actor2[i]*abs(D2)   
         
-        restoration_loss1_part = (player.restoreds1[i] - player.restore_labels1[i]).pow(2).sum()/ 20
-        restoration_loss2_part = (player.restoreds2[i] - player.restore_labels2[i]).pow(2).sum()/ 20
+        restoration_loss1_part = (player.restoreds1[i] - player.restore_labels1[i]).pow(2).sum()
+        restoration_loss2_part = (player.restoreds2[i] - player.restore_labels2[i]).pow(2).sum()
         restoration_loss1+= restoration_loss1_part*(abs(D1) + abs(D2))
         restoration_loss2+= restoration_loss2_part*abs(D2.item())
         
@@ -347,10 +347,10 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
             torch.sum(
                 player.probs_base[i].detach()*torch.log(player.probs1[i])
             )
-        )*(abs(player.values2[i].detach()+D2)) + \
+        )*(abs(V2_corr)) + \
         -0.5*torch.sum(
             player.probs1[i].detach()*torch.log(player.probs_play[i])
-        )*(abs(player.values1[i].detach()+D1))
+        )*(abs(V1_corr))
 
         policy_loss_base = policy_loss_base - \
             player.log_probs1_throughbase[i] * D2 * abs(V2_corr)
@@ -360,13 +360,13 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
             torch.sum(
                 player.probs_play[i].detach()*torch.log(player.probs_throughbase[i])
             )
-        )*(abs(player.values1[i].detach()+D1)) + \
+        )*abs(V1_corr) + \
         -0.5*torch.sum(
             player.probs_throughbase[i].detach()*torch.log(player.probs_base[i])
-        )*(abs(player.values2[i].detach()+D2))
+        )*abs(V2_corr)
         
         #value loss
-        V_last2 = gamma2 * V_last2 + ((1-gamma1)*(player.values1[i].detach()+D1))
+        V_last2 = gamma2 * V_last2 + (1-gamma1)*V1_corr
         advantage2 = V_last2 - player.values2[i]
         value_loss2 = value_loss2 + 0.5 * advantage2.pow(2)
         
@@ -377,9 +377,9 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
     kld_loss1 = kld_loss1/len(player.klds1)
     kld_loss2 = kld_loss2/len(player.klds2)
     if not (type(S_loss1)==int):
-        S_loss1 = torch.sum(S_loss1)* (1/np.sqrt(max(S_loss1.shape)))
+        S_loss1 = torch.sum(S_loss1) 
     if not (type(S_loss2)==int):
-        S_loss2 = torch.sum(S_loss2)* (1/np.sqrt(max(S_loss2.shape)))
+        S_loss2 = torch.sum(S_loss2) 
     return kld_loss1, policy_loss1, value_loss1, S_loss1, kld_loss2, policy_loss2, value_loss2, S_loss2, policy_loss_base, kld_loss_actor2, restoration_loss1, restoration_loss2, ce_loss1, ce_loss_base
 
     
