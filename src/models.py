@@ -146,9 +146,13 @@ class Oracle2(nn.Module):
 class Actor2(nn.Module):
     def __init__(self, args, device = "cpu"):
         super(Actor2, self).__init__()
-        self.a2 = nn.Linear(64*5*5, 8)
-        self.a2.apply(init_base) #.weight.data = #norm_col_init(self.a2.weight.data,1)
+        self.a2_mean = nn.Linear(64*5*5, 8)
+        self.a2_mean.apply(init_base) #.weight.data = #norm_col_init(self.a2.weight.data,1)
 #         self.action_std = nn.Linear(64*5*5, 8)
+
+        self.a2_std = nn.Linear(64*5*5, 8)
+        self.a2_std.apply(init_base)
+        
         self.gamma2 = float(args["Training"]["initial_gamma2"])
 
         self.a_mean=0
@@ -161,11 +165,15 @@ class Actor2(nn.Module):
 
     def forward(self, S):
         
-        a_mean = self.a2(T.clone(S)) #prediction form network
+        a_mean = self.a2_mean(T.clone(S)) #prediction form network
+        a_log_std = self.a2_std(T.clone(S)) #prediction form network
 
-        kl2 = 0 
+        kl2 = -0.5*(1 + 2*a_log_std - a_mean**2 - T.exp(2*a_log_std)).mean()
 
-        a = a_mean# + T.exp(a_log_std) * z_t #self.z_EMA_t
+        z_t = self.N.sample(a_mean.shape)
+        self.z_EMA_t=self.z_EMA_t*self.gamma2 + z_t*np.sqrt(1-self.gamma2**2)
+
+        a = a_mean + T.exp(a_log_std) * self.z_EMA_t
 
         log_probs2 = None #dist.log_prob(a)
         return a, None, log_probs2, kl2

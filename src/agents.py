@@ -2,7 +2,7 @@ from __future__ import division
 import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
-
+import numpy as np
 
 ## STOP rewrite agetnt with respect to hidden_states. 
 ## add Star features or switches or separate class
@@ -48,7 +48,7 @@ class Agent(object):
         self.a2_prev = torch.zeros((1,4)).to("cuda:"+str(gpu_id))
         
         self.prev_action_logits = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
-        self.prev_action1_logits = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
+        self.prev_action_sampled = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
         self.prev_action2_logits = torch.zeros((1,8)).to("cuda:"+str(gpu_id))
 
 
@@ -119,7 +119,7 @@ class Agent(object):
         with torch.autograd.set_detect_anomaly(True):
             kld1, x_restored1, v1, a1, self.hx1, self.cx1, s1, S1 = self.model1((Variable(
                 self.state.unsqueeze(0)),self.hx1, self.cx1, self.prev_action_logits.detach(),
-                                                            self.prev_action1_logits.detach()))
+                                                            self.prev_action_sampled.detach()))
             
 #             self.S1_runningmean = self.S1_runningmean*self.gamma1 + S1.detach()*(1-self.gamma1)
             
@@ -146,7 +146,7 @@ class Agent(object):
             self.train_episodes_run_2+=1
             
             self.prev_action_logits = a_base
-            self.prev_action1_logits = a1
+            
             self.prev_action2_logits = a2
 
 #             restoration_loss1 = self.w_restoration * (x_restored1 - self.state.unsqueeze(0).detach()).pow(2).sum()/ self.batch_size
@@ -159,6 +159,13 @@ class Agent(object):
         
         prob1, log_prob1, action1, entropy1 = self.get_probs(a)
         self.actions.append(action1)
+        
+        sampled_special_vector = np.ones_like(a.squeeze().detach().cpu().numpy())
+        sampled_special_vector = sampled_special_vector*(-1/(np.sqrt(6*5)))
+        sampled_special_vector[action1.squeeze().item()] = np.sqrt(5/6)
+        sampled_special_vector = torch.from_numpy(sampled_special_vector).unsqueeze(0)
+        self.prev_action_sampled = sampled_special_vector #for action done in env
+        
         
         prob_base, log_prob_base, action_base, entropy_base = self.get_probs(a_base)
         
@@ -277,7 +284,7 @@ class Agent(object):
                 self.cx2 = self.cx2.data
             
             kld1, x_restored1, v1, a1, self.hx1, self.cx1, s1, S1 = self.model1((Variable(
-                self.state.unsqueeze(0)),self.hx1, self.cx1, self.prev_action_logits.detach(), self.prev_action1_logits.detach()))
+                self.state.unsqueeze(0)),self.hx1, self.cx1, self.prev_action_logits.detach(), self.prev_action_sampled.detach()))
             
 #             self.S1_runningmean = self.S1_runningmean*self.gamma1 + S1.detach()*(1-self.gamma1)
 #             self.S1_runningmean = self.S1_runningmean*self.gamma1 + S1.detach()*(1-self.gamma1)
@@ -293,11 +300,20 @@ class Agent(object):
 #             a = alpha1*a1 + alpha2*a_base
             
             self.prev_action_logits = a_base
-            self.prev_action1_logits = a1
+#             self.prev_action1_logits = a1
             self.prev_action2_logits = a2
                 
         prob = F.softmax(a, dim=1)
         action = prob.max(1)[1].data.cpu().numpy()
+        
+        action1 = action
+        sampled_special_vector = np.ones_like(a.squeeze().detach().cpu().numpy())
+        sampled_special_vector = sampled_special_vector*(-1/(np.sqrt(6*5)))
+        sampled_special_vector[action1.squeeze().item()] = np.sqrt(5/6)
+        sampled_special_vector = torch.from_numpy(sampled_special_vector).unsqueeze(0)
+        self.prev_action_sampled = sampled_special_vector #for action done in env
+        
+        
         state, self.reward, self.done, self.info = self.env.step(action[0])
         self.state = torch.from_numpy(state).float()
         self.original_state = state

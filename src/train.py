@@ -170,7 +170,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             state = player.state
             kld1, x_restored1, v1, a1, hx1, cx1, s1, S1 = player.model1((Variable(
             state.unsqueeze(0)), player.hx1, player.cx1, player.prev_action_logits.detach(),
-                                                                         player.prev_action1_logits.detach()))
+                                                                         player.prev_action_sampled.detach()))
             
             kld2, x_restored2, v2, a2, a_base, hx2, cx2, s2, S2, ents, logprobs2, kld_actor2 = player.model2((S1.detach(), player.hx2,player.cx2, player.prev_action2_logits.detach())
                                                                  )
@@ -192,7 +192,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 
             loss1 += args["Training"]["w_kld"]*kld_loss1
             loss2 += args["Training"]["w_kld"]*kld_loss2
-            loss2 += 0.000*kld_loss_actor2 #args["Training"]["w_kld"]*
+            loss2 += args["Training"]["w_kld"]*kld_loss_actor2 #args["Training"]["w_kld"]*
 
             loss1 += args["Training"]["w_MPDI"]*MPDI_loss1
             loss2 += args["Training"]["w_MPDI"]*MPDI_loss2
@@ -374,8 +374,8 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         advantage1 = V_last1 - player.values1[i]
         value_loss1 = value_loss1 + 0.5 * advantage1.pow(2)
         
-    kld_loss1 = kld_loss1/len(player.klds1)
-    kld_loss2 = kld_loss2/len(player.klds2)
+    kld_loss1 = kld_loss1
+    kld_loss2 = kld_loss2
     if not (type(S_loss1)==int):
         S_loss1 = torch.sum(S_loss1) 
     if not (type(S_loss2)==int):
