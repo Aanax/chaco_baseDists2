@@ -61,6 +61,15 @@ class Encoder(nn.Module):
         self.conv11.apply(init_base)
         self.conv11_logvar.apply(init_base)
         
+        self.N = torch.distributions.Normal(0, 1)
+        self.N.loc = self.N.loc.to(device) # hack to get sampling on the GPU
+        self.N.scale = self.N.scale.to(device)
+        self.kl = 0
+        
+        for m in self.children():
+            if not hasattr(m,"name"):
+                m.name = None
+        
         
     def forward(self, x):
         
@@ -84,7 +93,7 @@ class Level1(nn.Module):
         
         self.oracle = Oracle({},device)
         self.decoder = Decoder({}, device)
-        self.encoder = Encoder({}, device)
+        self.encoder = Encoder(args, device)
         self.actor = nn.Linear(12800, 6)
         self.critic = nn.Linear(12800, 1)
         #32x40x40
@@ -93,10 +102,7 @@ class Level1(nn.Module):
                                  kernel_size=(5, 5),
                                  bias=True,
                                  num_actions=6,)
-        self.N = torch.distributions.Normal(0, 1)
-        self.N.loc = self.N.loc.to(device) # hack to get sampling on the GPU
-        self.N.scale = self.N.scale.to(device)
-        self.kl = 0
+       
         for m in self.children():
             if not hasattr(m,"name"):
                 m.name = None
@@ -118,8 +124,8 @@ class Level1(nn.Module):
         self.train()
         self.z_EMA_t = 0
 
-    def forward(self, x):
-        x, hx1, cx1, prev_action_logits,prev_action1_logits = x
+    def forward(self, x, hx1, cx1, prev_action_logits,prev_action1_logits):
+#          = x
         
         s, kl = self.encoder(x)
        
@@ -162,7 +168,7 @@ class Oracle2(nn.Module):
 class Actor2(nn.Module):
     def __init__(self, args, device = "cpu"):
         super(Actor2, self).__init__()
-        self.a2_mean = nn.Linear(64*5*5, 8)
+        self.a2_mean = nn.Linear(64*10*10, 8)
         self.a2_mean.apply(init_base) #.weight.data = #norm_col_init(self.a2.weight.data,1)
 #         self.action_std = nn.Linear(64*5*5, 8)
 
@@ -220,9 +226,12 @@ class Encoder2(nn.Module):
 #         self.conv1.apply(init_first)
         self.conv2.apply(init_base)
         self.conv2_logvar.apply(init_base)
-        self.decoder.apply(init_decoder) #CHECK IF WORKS
-        self.oracle.apply(init_base)
-        self.ConvLSTM_mu.apply(init_base)
+        
+        self.N = torch.distributions.Normal(0, 1)
+        self.N.loc = self.N.loc.to(device) # hack to get sampling on the GPU
+        self.N.scale = self.N.scale.to(device)
+        self.kl = 0
+        
         
         
     def forward(self, x):
@@ -246,12 +255,12 @@ class Level2(nn.Module):
     def __init__(self, args, shap, n_actions, device):
         super(Level2, self).__init__()
         
-        self.encoder = Encoder2({}, device)
+        self.encoder = Encoder2(args, device)
         self.oracle = Oracle2({},device)
         self.decoder = Decoder2({}, device)
         self.actor = Actor2(args,device)
         self.actor_base = nn.Linear(8, 6)
-        self.critic = nn.Linear(64*5*5, 1)
+        self.critic = nn.Linear(64*10*10, 1)
         #32x40x40
         self.ConvLSTM_mu = ConvLSTMwithAbaseCell(input_dim=64,
                                  hidden_dim=64,
@@ -259,14 +268,14 @@ class Level2(nn.Module):
                                  num_actions=8,
                                  bias=True,
                                        )
-        self.N = torch.distributions.Normal(0, 1)
-        self.N.loc = self.N.loc.to(device) # hack to get sampling on the GPU
-        self.N.scale = self.N.scale.to(device)
-        self.kl = 0
         
         for m in self.children():
             if not hasattr(m,"name"):
                 m.name = None
+                
+        self.decoder.apply(init_decoder) #CHECK IF WORKS
+        self.oracle.apply(init_base)
+        self.ConvLSTM_mu.apply(init_base)
             
 #         relu_gain = nn.init.calculate_gain('relu')
         self.actor_base.weight.data = norm_col_init(
@@ -297,12 +306,13 @@ class Level2(nn.Module):
         self.smean_not_set = True
         self.z_EMA_t = 0
         
-    def forward(self, x):
-        x, hx2, cx2, prev_action_logits = x
+    def forward(self, x, hx2, cx2, prev_action_logits):
+#         x, hx2, cx2, prev_action_logits = x
          
-        s, kl = self.encoder(s)
+        s, kl = self.encoder(x)
         decoded = self.decoder(s)
 
+        print(s.shape)
         hx, cx = self.ConvLSTM_mu(s, (hx2,cx2), prev_action_logits) #(states[0][0][0],states[0][1][0]))
 
         S = self.oracle(hx)

@@ -97,7 +97,7 @@ class ConvLSTMwithAbaseCell(nn.Module):
     def forward(self, input_tensor, cur_state, input_action):
         h_cur, c_cur = cur_state
 
-        action_maps = input_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,8,5,5))
+        action_maps = input_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,8,10,10))
         
         #spaial features
         #1,32,20,20 + 1,32,20,20 + 1,6,20,20
