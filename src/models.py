@@ -28,8 +28,6 @@ class Decoder(nn.Module):
 
         return x 
 
-
-    
 class Oracle(nn.Module):
     def __init__(self, args, device):#1024
         super(Oracle, self).__init__()
@@ -43,10 +41,10 @@ class Oracle(nn.Module):
         
         return x
 
-    
-class Level1(nn.Module):
-    def __init__(self, args, shap, n_actions, device):
-        super(Level1, self).__init__()
+class Encoder(nn.Module):
+    def __init__(self, args, device):#1024
+        super(Encoder, self).__init__()
+        
         self.gamma1 = float(args["Training"]["initial_gamma1"])
 
         self.conv1 = nn.Conv2d(1, 16, 5, stride=1, padding=2)
@@ -58,8 +56,35 @@ class Level1(nn.Module):
         self.conv11_logvar = nn.Conv2d(16, 32, 5, stride=1, padding=2)
         self.maxp11_logvar = nn.MaxPool2d(2, 2)
         
+             
+        self.conv1.apply(init_first)
+        self.conv11.apply(init_base)
+        self.conv11_logvar.apply(init_base)
+        
+        
+    def forward(self, x):
+        
+        x = F.relu(self.maxp1(self.conv1(x)))
+        mu = self.maxp11(self.conv11(x))
+        logvar = self.maxp11_logvar(self.conv11_logvar(x))
+
+        z_t = self.N.sample(mu.shape)
+        s = mu + T.exp(logvar / 2) * z_t #self.z_EMA_t
+        
+        kl = -0.5*(1 + logvar - mu**2 - T.exp(logvar)).mean() # + mu.detach()**2
+
+        
+        return s, kl
+    
+    
+class Level1(nn.Module):
+    def __init__(self, args, shap, n_actions, device):
+        super(Level1, self).__init__()
+        
+        
         self.oracle = Oracle({},device)
         self.decoder = Decoder({}, device)
+        self.encoder = Encoder({}, device)
         self.actor = nn.Linear(12800, 6)
         self.critic = nn.Linear(12800, 1)
         #32x40x40
@@ -76,10 +101,7 @@ class Level1(nn.Module):
             if not hasattr(m,"name"):
                 m.name = None
 
-            
-        self.conv1.apply(init_first)
-        self.conv11.apply(init_base)
-        self.conv11_logvar.apply(init_base)
+        
         self.decoder.apply(init_decoder)
         self.oracle.apply(init_base)
         self.ConvLSTM_mu.apply(init_base)
@@ -99,24 +121,18 @@ class Level1(nn.Module):
     def forward(self, x):
         x, hx1, cx1, prev_action_logits,prev_action1_logits = x
         
-        x = F.relu(self.maxp1(self.conv1(x)))
-        mu = self.maxp11(self.conv11(x))
-        logvar = self.maxp11_logvar(self.conv11_logvar(x))
-
-        z_t = self.N.sample(mu.shape)
-        s = mu + T.exp(logvar / 2) * z_t #self.z_EMA_t
-        
-        kl = -0.5*(1 + logvar - mu**2 - T.exp(logvar)).mean() # + mu.detach()**2
-
+        s, kl = self.encoder(x)
+       
         decoded = self.decoder(s)
-        
-        hx, cx = self.ConvLSTM_mu(s, (hx1,cx1), prev_action_logits, prev_action1_logits)
-        S = self.oracle(hx)
                 
-        z = hx.view(hx.size(0), -1)
+        z = s.view(s.size(0), -1)
         v = self.critic(z)
         actor_in = z.view(z.size(0), -1) #T.cat((z.view(z.size(0), -1), a2_prev.view(a2_prev.size(0), -1)),1)
         a = self.actor(actor_in)
+        
+        hx, cx = self.ConvLSTM_mu(s, (hx1,cx1), prev_action_logits, prev_action1_logits)
+        S = self.oracle(hx)
+        
         return kl,decoded,v,a, hx, cx, s,S  
 
 class Decoder2(nn.Module):
@@ -150,8 +166,8 @@ class Actor2(nn.Module):
         self.a2_mean.apply(init_base) #.weight.data = #norm_col_init(self.a2.weight.data,1)
 #         self.action_std = nn.Linear(64*5*5, 8)
 
-        self.a2_std = nn.Linear(64*5*5, 8)
-        self.a2_std.apply(init_base)
+#         self.a2_std = nn.Linear(64*5*5, 8)
+#         self.a2_std.apply(init_base)
         
         self.gamma2 = float(args["Training"]["initial_gamma2"])
 
@@ -166,40 +182,71 @@ class Actor2(nn.Module):
     def forward(self, S):
         
         a_mean = self.a2_mean(T.clone(S)) #prediction form network
-        a_log_std = self.a2_std(T.clone(S)) #prediction form network
+#         a_log_std = self.a2_std(T.clone(S)) #prediction form network
 
-        kl2 = -0.5*(1 + 2*a_log_std - a_mean**2 - T.exp(2*a_log_std)).mean()
+#         kl2 = -0.5*(1 + 2*a_log_std - a_mean**2 - T.exp(2*a_log_std)).mean()
 
+# #         z_t = self.N.sample(a_mean.shape)
+# #         self.z_EMA_t=self.z_EMA_t*self.gamma2 + z_t*np.sqrt(1-self.gamma2**2)
+
+# #         a = a_mean + T.exp(a_log_std) * self.z_EMA_t
 #         z_t = self.N.sample(a_mean.shape)
-#         self.z_EMA_t=self.z_EMA_t*self.gamma2 + z_t*np.sqrt(1-self.gamma2**2)
-
-#         a = a_mean + T.exp(a_log_std) * self.z_EMA_t
-        z_t = self.N.sample(a_mean.shape)
         #         self.z_EMA_t = self.z_EMA_t*self.gamma1 + np.sqrt(1-self.gamma1**2)*z_t
         # sqrt(1-g2^2)
         #         self.z_EMA_t=self.z_EMA_t*self.gamma2 + z_t*np.sqrt(1-self.gamma2**2)
 
-        a = a_mean + T.exp(a_log_std) * z_t  # self.z_EMA_t
+        a = a_mean # + T.exp(a_log_std) * z_t  # self.z_EMA_t
 
-        log_probs2 = None #dist.log_prob(a)
-        return a, None, log_probs2, kl2
+#         log_probs2 = None #dist.log_prob(a)
+        return a #, None, log_probs2, kl2
 
-class Level2(nn.Module):
-    def __init__(self, args, shap, n_actions, device):
-        super(Level2, self).__init__()
+class Encoder2(nn.Module):
+    def __init__(self, args, device):#1024
+        super(Encoder2, self).__init__()
+        
         self.gamma1 = float(args["Training"]["initial_gamma1"])
         self.gamma2 = float(args["Training"]["initial_gamma2"])
         self.Layernorm = nn.LayerNorm([32,20,20])        
-        #20 - 10 - 5
-        self.conv1 = nn.Conv2d(32, 48, 5, stride=1, padding=2)
-        self.maxp1 = nn.MaxPool2d(2, 2)
+#         #20 - 10
+#         self.conv1 = nn.Conv2d(32, 48, 5, stride=1, padding=2)
+#         self.maxp1 = nn.MaxPool2d(2, 2)
         
-        self.conv2 = nn.Conv2d(48, 64, 5, stride=1, padding=2)
+        self.conv2 = nn.Conv2d(32, 64, 5, stride=1, padding=2)
         self.maxp2 = nn.MaxPool2d(2, 2)
         
-        self.conv2_logvar = nn.Conv2d(48, 64, 5, stride=1, padding=2)
+        self.conv2_logvar = nn.Conv2d(32, 64, 5, stride=1, padding=2)
         self.maxp2_logvar = nn.MaxPool2d(2, 2)
         
+#         self.conv1.apply(init_first)
+        self.conv2.apply(init_base)
+        self.conv2_logvar.apply(init_base)
+        self.decoder.apply(init_decoder) #CHECK IF WORKS
+        self.oracle.apply(init_base)
+        self.ConvLSTM_mu.apply(init_base)
+        
+        
+    def forward(self, x):
+        
+        x = self.Layernorm(x)
+#         x = F.relu(self.maxp1(self.conv1(x)))
+        mu = self.maxp2(self.conv2(x))
+        logvar = self.maxp2_logvar(self.conv2_logvar(x))
+        
+        z_t = self.N.sample(mu.shape)
+        s = mu + T.exp(logvar / 2) * z_t #self.z_EMA_t
+        
+        kl = -0.5*(1 + logvar - mu**2 - T.exp(logvar)).mean()
+
+        
+        
+        return s, kl
+    
+    
+class Level2(nn.Module):
+    def __init__(self, args, shap, n_actions, device):
+        super(Level2, self).__init__()
+        
+        self.encoder = Encoder2({}, device)
         self.oracle = Oracle2({},device)
         self.decoder = Decoder2({}, device)
         self.actor = Actor2(args,device)
@@ -220,13 +267,6 @@ class Level2(nn.Module):
         for m in self.children():
             if not hasattr(m,"name"):
                 m.name = None
-
-        self.conv1.apply(init_first)
-        self.conv2.apply(init_base)
-        self.conv2_logvar.apply(init_base)
-        self.decoder.apply(init_decoder) #CHECK IF WORKS
-        self.oracle.apply(init_base)
-        self.ConvLSTM_mu.apply(init_base)
             
 #         relu_gain = nn.init.calculate_gain('relu')
         self.actor_base.weight.data = norm_col_init(
@@ -259,26 +299,17 @@ class Level2(nn.Module):
         
     def forward(self, x):
         x, hx2, cx2, prev_action_logits = x
-        x = self.Layernorm(x)
-        x = F.relu(self.maxp1(self.conv1(x)))
-        mu = self.maxp2(self.conv2(x))
-        logvar = self.maxp2_logvar(self.conv2_logvar(x))
-        
-        z_t = self.N.sample(mu.shape)
-        s = mu + T.exp(logvar / 2) * z_t #self.z_EMA_t
-        
-        kl = -0.5*(1 + logvar - mu**2 - T.exp(logvar)).mean() 
-
+         
+        s, kl = self.encoder(s)
         decoded = self.decoder(s)
-
 
         hx, cx = self.ConvLSTM_mu(s, (hx2,cx2), prev_action_logits) #(states[0][0][0],states[0][1][0]))
 
         S = self.oracle(hx)
         z = hx.view(hx.size(0), -1)
         v = self.critic(z)
-        a, entropy2, log_prob2, kl_actor2 = self.actor(z)
+        a_21 = self.actor(z)
         
-        a_base = self.actor_base(a.view(a.size(0), -1))
+        a_22 = self.actor_base(a_21.view(a_21.size(0), -1))
         
-        return kl,decoded,v,a, a_base, hx,cx,s,S,entropy2,log_prob2,kl_actor2
+        return kl,decoded,v,a_21, a_22, hx,cx,s,S

@@ -266,7 +266,7 @@ def get_pixel_change(pic1, pic2, STEP = 20):
     
     return res
     
-def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, gamma2, w_curiosity, kld_loss_calc):
+def train_A3C_united_TrueCE(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, gamma2, w_curiosity, kld_loss_calc):
     player.values1.append(V_last1) #Variable
     player.Ss1.append(S_last1)
     player.values2.append(V_last2) #Variable
@@ -381,11 +381,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
     if not (type(S_loss2)==int):
         S_loss2 = torch.sum(S_loss2) 
     return kld_loss1, policy_loss1, value_loss1, S_loss1, kld_loss2, policy_loss2, value_loss2, S_loss2, policy_loss_base, kld_loss_actor2, restoration_loss1, restoration_loss2, ce_loss1, ce_loss_base
-
-    
-    
-    
-    
+  
     
 def trainBASE(player, R, Q_last, gamma, tau, eps, optimizer, prev_deltas, sigma0, eps0):
   
@@ -416,3 +412,130 @@ def trainBASE(player, R, Q_last, gamma, tau, eps, optimizer, prev_deltas, sigma0
     losses = [policy_loss, value_loss]
     
     return gamma, eps, losses, [], 0, 0               
+
+
+    
+def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, gamma2, w_curiosity, kld_loss_calc):
+    player.values1.append(V_last1) #Variable
+    player.Ss1.append(S_last1)
+    player.values2.append(V_last2) #Variable
+    player.Ss2.append(S_last2)
+    policy_loss1 = 0
+    value_loss1 = 0
+    gae1 = torch.zeros(1, 1)
+    if player.gpu_id >= 0:
+        with torch.cuda.device(player.gpu_id):
+            gae1 = gae1.cuda()
+    kld_loss1 = 0
+    S_loss1 = 0
+    policy_loss2 = 0
+    policy_loss_base = 0
+    value_loss2 = 0
+#     gae2 = torch.zeros(1, 1)
+#     if player.gpu_id >= 0:
+#         with torch.cuda.device(player.gpu_id):
+#             gae2 = gae2.cuda()
+    kld_loss2 = 0
+    S_loss2 = 0
+    kld_loss_actor2 = 0
+    V1_runningmean=0
+    restoration_loss1=0
+    restoration_loss2=0
+    CE_loss = nn.CrossEntropyLoss()
+    r1_bonus = 0 
+
+    D1=0
+    D2=0
+    ce_loss_base = 0
+    ce_loss1 = 0    
+    VD_runningmean = player.VD_runningmean
+    VD_runningmeans = []
+    
+    T = len(player.rewards1)
+    
+    for i in reversed(range(len(player.rewards1))):
+        #restoration_loss
+        # FIXME. backwards in every agent_train call
+        S_last1, part_S_loss1, delta_S1 = MPDI_loss_calc1(player, V_last1, S_last1, tau, gamma1, None, i)
+        S_last2, part_S_loss2 = MPDI_loss_calc2(player, V_last2, S_last2, tau, gamma2, None, i)
+        ##+ delta_t2 ?
+        delta_t1 = player.rewards1[i]+r1_bonus + gamma1 * \
+            player.values1[i + 1].data - player.values1[i].data
+        
+        D1 = D1*gamma1 + delta_t1
+        
+
+        # Generalized Advantage Estimataion
+        delta_t2 = (1-gamma1)*(player.values1[i].detach()+D1) + gamma2 * \
+            player.values2[i + 1].data - player.values2[i].data
+        
+        D2 = D2*gamma2 + delta_t2
+        
+        S_loss1 += part_S_loss1*(abs(D1) + abs(D2)) #*abs(gae1)
+        S_loss2 += part_S_loss2*abs(D2)
+        
+        #KL loss
+        kld_delta1, kld_delta2 = kld_loss_calc(player, i)
+        kld_loss1+=kld_delta1*(abs(D1) + abs(D2))
+        kld_loss2+=kld_delta2*abs(D2)
+        kld_loss_actor2 += player.klds_actor2[i] #*abs(D2)   
+        
+        restoration_loss1_part = (player.restoreds1[i] - player.restore_labels1[i]).pow(2).sum()
+        restoration_loss2_part = (player.restoreds2[i] - player.restore_labels2[i]).pow(2).sum()
+        restoration_loss1+= restoration_loss1_part*(abs(D1) + abs(D2))
+        restoration_loss2+= restoration_loss2_part*abs(D2.item())
+        
+        V1_corr = player.values1[i].detach()+D1
+        V2_corr = player.values2[i].detach()+D2
+        
+        #loss a11
+        target_a11 = player_rewards[i]
+        loss_a11 = ((player.a11s[i]-target_a11)**2).sum()
+        
+        #loss a21
+        target_a21 = gamma2 * target_a21 + player.rewards1[i]
+        advantage_a21 = target_a21 - player.as21[i]
+        loss_a21 = loss_a21 + 0.5 * advantage_a21.pow(2)
+        
+#         policy_loss1 - \
+#             player.log_probs1[i] * D1 * abs(V1_corr)
+
+#         ce_loss1 += -0.5*(
+#             torch.sum(
+#                 player.probs_base[i].detach()*torch.log(player.probs1[i])
+#             )
+#         )*(abs(V2_corr)) + \
+#         -0.5*torch.sum(
+#             player.probs1[i].detach()*torch.log(player.probs_play[i])
+#         )*(abs(V1_corr))
+
+#         policy_loss_base = policy_loss_base - \
+#             player.log_probs1_throughbase[i] * D2 * abs(V2_corr)
+
+        
+#         ce_loss_base += -0.5*(
+#             torch.sum(
+#                 player.probs_play[i].detach()*torch.log(player.probs_throughbase[i])
+#             )
+#         )*abs(V1_corr) + \
+#         -0.5*torch.sum(
+#             player.probs_throughbase[i].detach()*torch.log(player.probs_base[i])
+#         )*abs(V2_corr)
+        
+        #value loss
+        V_last2 = gamma2 * V_last2 + (1-gamma1)*V1_corr
+        advantage2 = V_last2 - player.values2[i]
+        value_loss2 = value_loss2 + 0.5 * advantage2.pow(2)
+        
+        V_last1 = gamma1 * V_last1 + player.rewards1[i]
+        advantage1 = V_last1 - player.values1[i]
+        value_loss1 = value_loss1 + 0.5 * advantage1.pow(2)
+        
+    kld_loss1 = kld_loss1
+    kld_loss2 = kld_loss2
+    if not (type(S_loss1)==int):
+        S_loss1 = torch.sum(S_loss1) 
+    if not (type(S_loss2)==int):
+        S_loss2 = torch.sum(S_loss2) 
+    return kld_loss1, policy_loss1, value_loss1, S_loss1, kld_loss2, policy_loss2, value_loss2, S_loss2, policy_loss_base, kld_loss_actor2, restoration_loss1, restoration_loss2, ce_loss1, ce_loss_base
+
