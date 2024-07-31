@@ -18,3 +18,6 @@ __pycache__
 *nohup*
 RL_onserver_utils
 RL_onserver_utils/*
+*.gv
+*.gv*
+src/Level1

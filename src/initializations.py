@@ -69,25 +69,6 @@ def init_base(m):
         w_bound = np.sqrt(6. / (fan_in + fan_out))
         m.weight.data.uniform_(-w_bound, w_bound)
         m.bias.data.fill_(0)
-#         try:
-#             if m.name=="a_out":
-#                 m.weight.data = norm_col_init(
-#                     m.weight.data, 0.01)
-#             if m.name=="t_out":
-#                 m.weight.data = norm_col_init(
-#                     m.weight.data, 0.1)
-#             if m.name=="S_out":
-#                 w_bound = np.sqrt(6. / (fan_in + 2*fan_out))
-#                 m.weight.data.uniform_(-w_bound, w_bound)
-#                 m.bias.data.fill_(0)
-                
-#         except:
-#             pass
-#     elif classname.find('LSTM') != -1:
-#         m.bias_ih.data.fill_(0)
-#         m.bias_hh.data.fill_(0)
-     
-            
 def init_decoder(m):
     relu_gain = 1 #nn.init.calculate_gain('relu')
     classname = m.__class__.__name__

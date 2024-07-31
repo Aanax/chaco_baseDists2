@@ -117,69 +117,30 @@ class Agent(object):
     def action_train(self):
         
         with torch.autograd.set_detect_anomaly(True):
-            kld1, x_restored1, v1, a1, self.hx1, self.cx1, s1, S1 = self.model1((Variable(
-                self.state.unsqueeze(0)),self.hx1, self.cx1, self.prev_action_logits.detach(),
-                                                            self.prev_action_sampled.detach()))
+            #kl,decoded,v,a, s
+            kld1, x_restored1, v1, Q_11, s1 = self.model1(Variable(
+                self.state.unsqueeze(0)))
             
-#             self.S1_runningmean = self.S1_runningmean*self.gamma1 + S1.detach()*(1-self.gamma1)
-            
-            #r_i + g*r_i+1 + g^2*r_i+2 + ... + g^(T-i-1)*r_(T-1) + g^(T-i)*V1_T
-            
+            #kl, v, a_21, a_22, Q_22, hx,cx,s,S
+            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2((s1.detach(), self.hx2, self.cx2))
             
             
-#             self.V1_runningmean = self.V1_runningmean*self.gamma1 + (1-self.gamma1)*v1.detach()
-
-            kld2, x_restored2, v2, a2, a_base, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2((S1.detach(), self.hx2, self.cx2,  self.prev_action2_logits.detach()))
-            
-            a = a1 + a_base.detach()
-
-#             alpha1 = (abs(v1)/(abs(v1)+abs(v2)+0.001)).detach()
-#             alpha2 = (abs(v2)/(abs(v1)+abs(v2)+0.001)).detach()
-            
-#             a = alpha1*a1 + alpha2*a_base.detach()
-    
-            a_throughbase = a1.detach() + a_base
-
-#             a_throughbase = alpha1*a1.detach() + alpha2*a_base
+            action_probs = F.softmax(Q_11+Q_21)
+            action1 = action_probs.multinomial(1).data
+            self.actions.append(action1)
+           
             
             self.train_episodes_run+=1
             self.train_episodes_run_2+=1
-            
-            self.prev_action_logits = a_base
-            
-            self.prev_action2_logits = a2
-
-#             restoration_loss1 = self.w_restoration * (x_restored1 - self.state.unsqueeze(0).detach()).pow(2).sum()/ self.batch_size
-            
             self.restoreds1.append(x_restored1)
             self.restore_labels1.append(self.state.unsqueeze(0).detach())
-        
-            self.restoreds2.append(x_restored2)
-            self.restore_labels2.append(S1.detach())
-        
-        prob1, log_prob1, action1, entropy1 = self.get_probs(a)
-        self.actions.append(action1)
-        
-        sampled_special_vector = np.ones_like(a.squeeze().detach().cpu().numpy())
-        sampled_special_vector = sampled_special_vector*(-1/(np.sqrt(6*5)))
-        sampled_special_vector[action1.squeeze().item()] = np.sqrt(5/6)
-        sampled_special_vector = torch.from_numpy(sampled_special_vector).unsqueeze(0)
-        self.prev_action_sampled = sampled_special_vector #for action done in env
-        
-        
-        prob_base, log_prob_base, action_base, entropy_base = self.get_probs(a_base)
-        
-        prob_throughbase, log_prob_throughbase, action_throughbase, entropy_throughbase = self.get_probs(a_throughbase)
-        
-        prob_play, log_prob_play, action_play, entropy_play = self.get_probs(a1)
-        
-        self.log_probs1_throughbase.append(log_prob_throughbase)
-#         prob2, log_prob2, action2, entropy2 = self.get_probs(a2)
-#         action2 = a2
+
         
         state, self.reward, self.done, self.info = self.env.step(
             action1.cpu().numpy())
         
+        self.Q_11s.append(Q_11)
+        self.Q_21s.append(Q_21)
         self.state = torch.from_numpy(state).float()
         if self.gpu_id >= 0:
             with torch.cuda.device(self.gpu_id):
@@ -188,31 +149,16 @@ class Agent(object):
         
 #         self.alphas1.append(alpha1)
 #         self.alphas2.append(alpha2)
-        self.S1_prev = torch.clone(S1.detach())
         self.S2_prev = torch.clone(S2.detach())
-        self.a1_prev = torch.clone(a1.detach())
-        self.a2_prev = torch.clone(a2.detach())
         
         
         
-        self.entropies1.append(entropy1)
         self.values1.append(v1)
-        self.log_probs1.append(log_prob1)
-        self.log_probs_base.append(log_prob_base)
-        self.probs1.append(prob1)
-        self.probs_base.append(prob_base)
-        self.probs_play.append(prob_play)
         
-        self.probs_throughbase.append(prob_throughbase)
-        
-        self.logits1.append(a)
-        self.logits_base.append(a_base)
-        self.logits_play.append(a1)
         
         self.rewards1.append(self.reward)
         self.klds1.append(kld1)
         self.ss1.append(s1)
-        self.Ss1.append(S1)
         
 #         self.Ss1_runningmean.append(torch.clone(self.S1_runningmean).detach())
 #         self.values1_runningmean.append(torch.clone(self.V1_runningmean).detach())
@@ -370,6 +316,8 @@ class Agent(object):
         
         self.ss1 = []
         self.Ss1 = []
+        self.Q_21s = []
+        self.Q_22s = []
         self.states1 = []
         
         self.values2 = []
