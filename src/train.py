@@ -295,7 +295,6 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
     restoration_loss1=0
     restoration_loss2=0
     CE_loss = nn.CrossEntropyLoss()
-    r1_bonus = 0 
 
     D1=0
     D2=0
@@ -311,7 +310,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         S_last2, part_S_loss2 = MPDI_loss_calc2(player, V_last2, S_last2, tau, gamma2, None, i)
         S_loss2 += part_S_loss2
         
-        delta_t1 = player.rewards1[i]+r1_bonus + gamma1 * \
+        delta_t1 = player.rewards1[i] + gamma1 * \
             player.values1[i + 1].data - player.values1[i].data
         
         D1 = D1*gamma1 + delta_t1
@@ -342,14 +341,14 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         advantage_Q_21 = target_Q_21 - player.Q_21s[i]
         loss_Q_21 = loss_Q_21 + 0.5 * advantage_Q_21.pow(2)
         
-        #value loss
-        V_last2 = gamma2 * V_last2 + (1-gamma1)*V1_corr
-        advantage2 = V_last2 - player.values2[i]
-        value_loss2 = value_loss2 + 0.5 * advantage2.pow(2)
+#         #value loss
+#         V_last2 = gamma2 * V_last2 + (1-gamma1)*V1_corr
+#         advantage2 = V_last2 - player.values2[i]
+#         value_loss2 = value_loss2 + 0.5 * advantage2.pow(2)
         
-        V_last1 = gamma1 * V_last1 + player.rewards1[i]
-        advantage1 = V_last1 - player.values1[i]
-        value_loss1 = value_loss1 + 0.5 * advantage1.pow(2)
+#         V_last1 = gamma1 * V_last1 + player.rewards1[i]
+#         advantage1 = V_last1 - player.values1[i]
+#         value_loss1 = value_loss1 + 0.5 * advantage1.pow(2)
         
 
     return kld_loss1, restoration_loss1, loss_Q_11, value_loss1, kld_loss2, loss_Q_21, value_loss2, S_loss2

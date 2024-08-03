@@ -79,7 +79,7 @@ class Level1(nn.Module):
         super(Level1, self).__init__()
         
         
-        self.oracle = Oracle({},device)
+#         self.oracle = Oracle({},device)
         self.decoder = Decoder({}, device)
         self.encoder = Encoder(args, device)
         self.actor = nn.Linear(12800, 6)
@@ -89,8 +89,8 @@ class Level1(nn.Module):
             if not hasattr(m,"name"):
                 m.name = None
         self.decoder.apply(init_decoder)
-        self.oracle.apply(init_base)
-        self.ConvLSTM_mu.apply(init_base)
+#         self.oracle.apply(init_base)
+#         self.ConvLSTM_mu.apply(init_base)
                         
         self.actor.weight.data = norm_col_init(
         self.actor.weight.data, args["Model"]["a_init_std"])
@@ -138,15 +138,15 @@ class Encoder2(nn.Module):
         
         self.gamma1 = float(args["Training"]["initial_gamma1"])
         self.gamma2 = float(args["Training"]["initial_gamma2"])
-        self.Layernorm = nn.LayerNorm([32,20,20])        
+#         self.Layernorm = nn.LayerNorm([38,20,20])        
 #         #20 - 10 - 5
-        self.conv1 = nn.Conv2d(32, 48, 5, stride=1, padding=2)
+        self.conv1 = nn.Conv2d(38, 64, 5, stride=1, padding=2)
         self.maxp1 = nn.MaxPool2d(2, 2)
         
-        self.conv2 = nn.Conv2d(48, 64, 5, stride=1, padding=2)
+        self.conv2 = nn.Conv2d(64, 64, 5, stride=1, padding=2)
         self.maxp2 = nn.MaxPool2d(2, 2)
         
-        self.conv2_logvar = nn.Conv2d(48, 64, 5, stride=1, padding=2)
+        self.conv2_logvar = nn.Conv2d(64, 64, 5, stride=1, padding=2)
         self.maxp2_logvar = nn.MaxPool2d(2, 2)
         
         self.conv1.apply(init_first)
@@ -162,7 +162,7 @@ class Encoder2(nn.Module):
         
     def forward(self, x):
         
-        x = self.Layernorm(x)
+#         x = self.Layernorm(x)
         x = F.relu(self.maxp1(self.conv1(x)))
         mu = self.maxp2(self.conv2(x))
         logvar = self.maxp2_logvar(self.conv2_logvar(x))
@@ -213,7 +213,9 @@ class Level2(nn.Module):
         self.smean_not_set = True
         self.z_EMA_t = 0
         
-    def forward(self, x, hx2, cx2):         
+    def forward(self, x, hx2, cx2, prev_action): 
+        prev_action = prev_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,20,20))
+        x = torch.cat([x,prev_action], dim=1)
         s, kl = self.encoder(x)
         hx, cx = self.ConvLSTM_mu(s, (hx2,cx2)) #(states[0][0][0],states[0][1][0]))
         S = self.decoder(hx) #self.oracle(hx)

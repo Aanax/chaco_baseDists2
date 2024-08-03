@@ -45,7 +45,7 @@ class Agent(object):
         self.S2_prev = torch.zeros((1,args["Model"]["S2_dim"])).to("cuda:"+str(gpu_id))
         
         self.a1_prev = torch.zeros((1,env.action_space.n)).to("cuda:"+str(gpu_id))
-        self.a2_prev = torch.zeros((1,4)).to("cuda:"+str(gpu_id))
+        self.Q_21_prev = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
         
         self.prev_action_logits = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
         self.prev_action_sampled = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
@@ -122,7 +122,9 @@ class Agent(object):
                 self.state.unsqueeze(0)))
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
-            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2((s1.detach(), self.hx2, self.cx2))
+            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2(s1.detach(), self.hx2, self.cx2, self.Q_21_prev)
+            
+            self.Q_21_prev = Q_21
             
             
             action_probs = F.softmax(Q_11+Q_21)
@@ -228,37 +230,17 @@ class Agent(object):
                 self.cx1 = self.cx1.data
                 self.hx2 = self.hx2.data
                 self.cx2 = self.cx2.data
-            
-            kld1, x_restored1, v1, a1, self.hx1, self.cx1, s1, S1 = self.model1((Variable(
-                self.state.unsqueeze(0)),self.hx1, self.cx1, self.prev_action_logits.detach(), self.prev_action_sampled.detach()))
-            
-#             self.S1_runningmean = self.S1_runningmean*self.gamma1 + S1.detach()*(1-self.gamma1)
-#             self.S1_runningmean = self.S1_runningmean*self.gamma1 + S1.detach()*(1-self.gamma1)
-
-            kld2, x_restored2, v2, a2, a_base, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2((S1, self.hx2, self.cx2, self.prev_action2_logits.detach()))
-            
-            a = a1 + a_base*int(not ZERO_ABASE)
-            
-    
-#             alpha1 = abs(v1)/(abs(v1)+abs(v2)+0.001)
-#             alpha2 = abs(v2)/(abs(v1)+abs(v2)+0.001)
-            
-#             a = alpha1*a1 + alpha2*a_base
-            
-            self.prev_action_logits = a_base
-#             self.prev_action1_logits = a1
-            self.prev_action2_logits = a2
                 
-        prob = F.softmax(a, dim=1)
-        action = prob.max(1)[1].data.cpu().numpy()
-        
-        action1 = action
-        sampled_special_vector = np.ones_like(a.squeeze().detach().cpu().numpy())
-        sampled_special_vector = sampled_special_vector*(-1/(np.sqrt(6*5)))
-        sampled_special_vector[action1.squeeze().item()] = np.sqrt(5/6)
-        sampled_special_vector = torch.from_numpy(sampled_special_vector).unsqueeze(0)
-        self.prev_action_sampled = sampled_special_vector #for action done in env
-        
+            kld1, x_restored1, v1, Q_11, s1 = self.model1(Variable(
+                self.state.unsqueeze(0)))
+            
+            #kl, v, a_21, a_22, Q_22, hx,cx,s,S
+            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2(s1.detach(), self.hx2, self.cx2, self.Q_21_prev)
+            
+            self.Q_21_prev = Q_21
+            
+            action_probs = F.softmax(Q_11+Q_21)
+            action1 = action_probs.multinomial(1).data #?
         
         state, self.reward, self.done, self.info = self.env.step(action[0])
         self.state = torch.from_numpy(state).float()
@@ -273,18 +255,11 @@ class Agent(object):
         self.a1_prev = a1.detach()
         self.a2_prev = a2.detach()
         
-        self.last_S = S1
         self.last_S2 = S2
         self.last_v = v1
         self.last_v2 = v2
         self.last_s = s1
         self.last_s2 = s2
-        
-        self.last_a1 = a1
-        self.last_a2 = a2
-        self.last_abase = a_base
-        self.last_a = a
-        
         
         if self.gpu_id >= 0:
             with torch.cuda.device(self.gpu_id):
