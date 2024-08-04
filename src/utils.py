@@ -35,11 +35,11 @@ def read_config(file_path):
 
 def ensure_shared_grads(model, shared_model, gpu=False):
     
-#     for name, param in model.named_parameters():
-# #         if param.grad is not None:
-# #             print(name, param.grad.sum())
-#         if param.grad is None:
-#             print(name, param.grad)
+    for name, param in model.named_parameters():
+#         if param.grad is not None:
+#             print(name, param.grad.sum())
+        if param.grad is None:
+            print("GRAD NONE ", name, param.grad)
 
     
     for param, shared_param in zip(model.parameters(),

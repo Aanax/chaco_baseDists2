@@ -214,7 +214,7 @@ class Level2(nn.Module):
         self.z_EMA_t = 0
         
     def forward(self, x, hx2, cx2, prev_action): 
-        prev_action = prev_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,20,20))
+        prev_action = prev_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,20,20)).detach()
         x = torch.cat([x,prev_action], dim=1)
         s, kl = self.encoder(x)
         hx, cx = self.ConvLSTM_mu(s, (hx2,cx2)) #(states[0][0][0],states[0][1][0]))

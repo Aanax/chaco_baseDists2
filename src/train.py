@@ -215,10 +215,10 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             f.close()
             
             
-            loss_restoration1 = args["Training"]["w_restoration"] * loss_restoration1
-            loss_restoration2 = args["Training"]["w_restoration"] * loss_restoration2
+            loss_restoration1 = args["Training"]["w_restoration"] * restoration_loss1
+#             loss_restoration2 = args["Training"]["w_restoration"] * loss_restoration2
             loss_restoration1.backward(retain_graph=True)
-            loss_restoration2.backward(retain_graph=True)
+#             loss_restoration2.backward(retain_graph=True)
 
             loss1.backward(retain_graph=True)
             loss2.backward(retain_graph=False)
@@ -241,7 +241,7 @@ def MPDI_loss_calc1(player, V_last1, S_last1, tau, gamma1, adaptive, i):
 
 def MPDI_loss_calc2(player, V_last2, S_last2, tau, gamma2, adaptive, i):
     #Discounted Features rewards (s - after encoding S-after lstm)
-    S_last2 = S_last2*gamma2 + player.ss2[i].detach()
+    S_last2 = S_last2*gamma2 + player.ss1[i].detach()
     S_advantage2 = (1-gamma2)*S_last2-player.Ss2[i]
     return S_last2, 0.5 * S_advantage2.pow(2).sum()
 
@@ -288,6 +288,10 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
 #             gae2 = gae2.cuda()
     kld_loss2 = 0
     S_loss2 = 0
+    loss_Q_21 = 0
+    loss_Q_22 = 0
+    loss_Q_11 = 0
+    target_Q_21 = 0
     kld_loss_actor2 = 0
     V1_runningmean=0
     restoration_loss1=0
@@ -331,23 +335,23 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         V2_corr = player.values2[i].detach()+D2
         
         #loss a11
-        target_Q_11 = player.rewards[i]
+        target_Q_11 = player.rewards1[i]
         loss_Q_11 = loss_Q_11 + 0.5 * ((player.Q_11s[i]-target_Q_11)**2).sum()
         
         #loss a21
         target_Q_21 = gamma2 * target_Q_21 + player.rewards1[i]
         advantage_Q_21 = target_Q_21 - player.Q_21s[i]
-        loss_Q_21 = loss_Q_21 + 0.5 * advantage_Q_21.pow(2)
+        loss_Q_21 = loss_Q_21 + 0.5 * advantage_Q_21.pow(2).sum()
         
-#         #value loss
-#         V_last2 = gamma2 * V_last2 + (1-gamma1)*V1_corr
-#         advantage2 = V_last2 - player.values2[i]
-#         value_loss2 = value_loss2 + 0.5 * advantage2.pow(2)
+        #value loss
+        V_last2 = gamma2 * V_last2 + (1-gamma1)*V1_corr
+        advantage2 = V_last2 - player.values2[i]
+        value_loss2 = value_loss2 + 0.5 * advantage2.pow(2)
         
-#         V_last1 = gamma1 * V_last1 + player.rewards1[i]
-#         advantage1 = V_last1 - player.values1[i]
-#         value_loss1 = value_loss1 + 0.5 * advantage1.pow(2)
+        V_last1 = gamma1 * V_last1 + player.rewards1[i]
+        advantage1 = V_last1 - player.values1[i]
+        value_loss1 = value_loss1 + 0.5 * advantage1.pow(2)
         
 
-    return kld_loss1, restoration_loss1, loss_Q_11, value_loss1, kld_loss2, loss_Q_21, value_loss2, S_loss2
+    return kld_loss1, restoration_loss1, loss_Q_11, value_loss1*0, kld_loss2, loss_Q_21, value_loss2*0, S_loss2
 
