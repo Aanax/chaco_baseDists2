@@ -168,16 +168,14 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
         
         if not player.done:
             state = player.state
-            kld1, x_restored1, v1, a1, hx1, cx1, s1, S1 = player.model1((Variable(
-            state.unsqueeze(0)), player.hx1, player.cx1, player.prev_action_logits.detach(),
-                                                                         player.prev_action_sampled.detach()))
+            kld1, x_restored1, v1, Q_11, s1 = player.model1(Variable(
+            state.unsqueeze(0)))
             
-            kld2, x_restored2, v2, a2, a_base, hx2, cx2, s2, S2, ents, logprobs2, kld_actor2 = player.model2((S1.detach(), player.hx2,player.cx2, player.prev_action2_logits.detach())
-                                                                 )
+            kld2, v2, Q_21, a_22, Q_22, player.hx2, player.cx2, s2, S2 = player.model2(s1.detach(), player.hx2, player.cx2, player.Q_21_prev)
             player.train_episodes_run+=1
             V_last1 = v1.detach()
             V_last2 = v2.detach()
-            S_last1 = S1.detach()
+            S_last1 = 0#S1.detach()
             S_last2 = S2.detach()
             
             

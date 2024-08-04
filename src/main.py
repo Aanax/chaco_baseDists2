@@ -10,19 +10,14 @@ import torch.multiprocessing as mp
 from environment import atari_env, mujoco_env
 from utils import read_config
 from models import *#A3Clstm, StarA3C
-
 from test import *#test, testSTAR
 from shared_optim import SharedRMSprop, SharedAdam
 #from gym.configuration import undo_logger_setup
 import time
 import configparser
-
 from typing import Dict
-
-from train import *#train, trainSTAR
-        
+from train import *        
 from time import gmtime, strftime
-
 
 # Based on
 # https://github.com/pytorch/examples/tree/master/mnist_hogwild

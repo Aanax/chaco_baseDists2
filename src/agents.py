@@ -122,7 +122,7 @@ class Agent(object):
                 self.state.unsqueeze(0)))
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
-            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2(s1.detach(), self.hx2, self.cx2, self.Q_21_prev)
+            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2 = self.model2(s1.detach(), self.hx2, self.cx2, self.Q_21_prev)
             
             self.Q_21_prev = Q_21
             
@@ -165,11 +165,11 @@ class Agent(object):
 #         self.Ss1_runningmean.append(torch.clone(self.S1_runningmean).detach())
 #         self.values1_runningmean.append(torch.clone(self.V1_runningmean).detach())
         
-        self.entropies2.append(entropy2)
+#         self.entropies2.append(entropy2)
         self.values2.append(v2)
-        self.log_probs2.append(log_prob2)
+#         self.log_probs2.append(log_prob2)
         self.klds2.append(kld2)
-        self.klds_actor2.append(kl_actor2)
+#         self.klds_actor2.append(kl_actor2)
 #         self.a_klds2.append(a_kld2)
         self.ss2.append(s2)
         self.Ss2.append(S2)
@@ -235,25 +235,25 @@ class Agent(object):
                 self.state.unsqueeze(0)))
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
-            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, entropy2, log_prob2, kl_actor2 = self.model2(s1.detach(), self.hx2, self.cx2, self.Q_21_prev)
+            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2 = self.model2(s1.detach(), self.hx2, self.cx2, self.Q_21_prev)
             
             self.Q_21_prev = Q_21
             
             action_probs = F.softmax(Q_11+Q_21)
             action1 = action_probs.multinomial(1).data #?
         
-        state, self.reward, self.done, self.info = self.env.step(action[0])
+        state, self.reward, self.done, self.info = self.env.step(action1.cpu().numpy())
         self.state = torch.from_numpy(state).float()
         self.original_state = state
-        self.original_state2 = S1
+#         self.original_state2 = S1
         self.restored_state = x_restored1
-        self.restored_state2 = x_restored2
+#         self.restored_state2 = x_restored2
         
 #         self.restored_after_lstm = self.model.Decoder2(S)
-        self.S1_prev = S1.detach()
+#         self.S1_prev = S1.detach()
         self.S2_prev = S2.detach()
-        self.a1_prev = a1.detach()
-        self.a2_prev = a2.detach()
+#         self.a1_prev = a1.detach()
+#         self.a2_prev = a2.detach()
         
         self.last_S2 = S2
         self.last_v = v1
@@ -291,6 +291,7 @@ class Agent(object):
         
         self.ss1 = []
         self.Ss1 = []
+        self.Q_11s = []
         self.Q_21s = []
         self.Q_22s = []
         self.states1 = []
