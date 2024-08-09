@@ -228,4 +228,4 @@ class Level2(nn.Module):
         
         a_22 = F.relu(Q_22-V_wave.detach())
         a_21 = self.actor_base(a_22.view(a_22.size(0), -1))
-        return kl, v, a_21, a_22, Q_22, hx,cx,s,S
+        return kl, v, a_21, a_22, Q_22, hx,cx,s,S, V_wave

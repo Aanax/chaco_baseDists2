@@ -171,7 +171,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             kld1, x_restored1, v1, Q_11, s1 = player.model1(Variable(
             state.unsqueeze(0)))
             
-            kld2, v2, Q_21, a_22, Q_22, player.hx2, player.cx2, s2, S2 = player.model2(s1.detach(), player.hx2, player.cx2, player.Q_21_prev)
+            kld2, v2, Q_21, a_22, Q_22, player.hx2, player.cx2, s2, S2, V_wave = player.model2(s1.detach(), player.hx2, player.cx2, player.Q_21_prev)
             player.train_episodes_run+=1
             V_last1 = v1.detach()
             V_last2 = v2.detach()
@@ -188,6 +188,14 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             
             kld_loss1, restoration_loss1, loss_Q_11, value_loss1, kld_loss2, loss_Q_21, value_loss2, S_loss2 = losses
             
+            losses = list(losses)
+            loss_Q11_non_summed_components = loss_Q_11
+            loss_Q21_non_summed_components = loss_Q_21
+            
+            loss_Q_11 = loss_Q_11.sum()
+            loss_Q_21 = loss_Q_21.sum()
+            losses[2] = loss_Q_11
+            losses[5] = loss_Q_21
             loss1 = (args["Training"]["w_policy"]*loss_Q_11+args["Training"]["w_value"]*value_loss1)
             loss2 = (args["Training"]["w_policy"]*loss_Q_21+args["Training"]["w_value"]*value_loss2)
 
@@ -197,8 +205,9 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             loss2 += args["Training"]["w_MPDI"]*S_loss2
 
 
-            mean_V1 = torch.mean(torch.Tensor(player.values1)).cpu().numpy()
-            mean_V2 = torch.mean(torch.Tensor(player.values2)).cpu().numpy()
+#             mean_V1 = torch.mean(torch.Tensor(player.values1)).cpu().numpy()
+#             mean_V2 = torch.mean(torch.Tensor(player.values2)).cpu().numpy()
+            mean_Vs_wave = torch.mean(torch.Tensor(player.Vs_wave)).cpu().numpy()
             mean_re1 = float(np.mean(player.rewards1))
 
             additional_logs = []
@@ -208,10 +217,23 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
                     additional_logs.append(loss_i.item())
                 else:
                     additional_logs.append(loss_i)
+                    
+            print("loss_Q11_non_summed_components ", loss_Q11_non_summed_components.shape, flush=True)
+            for qloss in loss_Q11_non_summed_components.squeeze():
+                if not (qloss == 0):
+                    additional_logs.append(qloss.item())
+                else:
+                    additional_logs.append(qloss)
+            
+            for qloss in loss_Q21_non_summed_components.squeeze():
+                if not (qloss == 0):
+                    additional_logs.append(qloss.item())
+                else:
+                    additional_logs.append(qloss)
             
             f = open(STATS_CSV_PATH, 'a')
             writer = csv.writer(f)
-            writer.writerow([mean_V1, mean_V2, mean_re1, counter.value, local_counter]+additional_logs)
+            writer.writerow([mean_Vs_wave, mean_re1, counter.value, local_counter]+additional_logs)
             f.close()
             
             
@@ -336,12 +358,12 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         
         #loss a11
         target_Q_11 = player.rewards1[i]
-        loss_Q_11 = loss_Q_11 + 0.5 * ((player.Q_11s[i]-target_Q_11)**2).sum()
+        loss_Q_11 = loss_Q_11 + 0.5 * ((player.Q_11s[i]-target_Q_11)**2)
         
         #loss a21
-        target_Q_21 = gamma2 * target_Q_21 + player.rewards1[i]
+        target_Q_21 = gamma2 * target_Q_21 + player.Q_11s[i].detach()
         advantage_Q_21 = target_Q_21 - player.Q_21s[i]
-        loss_Q_21 = loss_Q_21 + 0.5 * advantage_Q_21.pow(2).sum()
+        loss_Q_21 = loss_Q_21 + 0.5 * advantage_Q_21.pow(2)#.sum()
         
         #value loss
         V_last2 = gamma2 * V_last2 + (1-gamma1)*V1_corr

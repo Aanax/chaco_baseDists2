@@ -122,11 +122,11 @@ class Agent(object):
                 self.state.unsqueeze(0)))
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
-            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2 = self.model2(s1.detach(), self.hx2, self.cx2, self.Q_21_prev)
+            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, V_wave = self.model2(s1.detach(), self.hx2, self.cx2, self.Q_21_prev)
             
             self.Q_21_prev = Q_21
             
-            
+            self.Vs_wave.append(V_wave.item())
             action_probs = F.softmax(Q_11+Q_21)
             action1 = action_probs.multinomial(1).data
             self.actions.append(action1)
@@ -235,7 +235,7 @@ class Agent(object):
                 self.state.unsqueeze(0)))
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
-            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2 = self.model2(s1.detach(), self.hx2, self.cx2, self.Q_21_prev)
+            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, V_wave = self.model2(s1.detach(), self.hx2, self.cx2, self.Q_21_prev)
             
             self.Q_21_prev = Q_21
             
@@ -295,6 +295,8 @@ class Agent(object):
         self.Q_21s = []
         self.Q_22s = []
         self.states1 = []
+        
+        self.Vs_wave = []
         
         self.values2 = []
         self.log_probs2 = []
