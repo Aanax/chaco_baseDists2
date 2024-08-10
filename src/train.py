@@ -358,7 +358,10 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         
         #loss a11
         target_Q_11 = player.rewards1[i]
-        loss_Q_11 = loss_Q_11 + 0.5 * ((player.Q_11s[i]-target_Q_11)**2)
+        loss_mask = torch.zeros((1,6))
+        loss_mask[0][player.actions[i].item()] = 1
+        loss_mask = loss_mask.to(player.Q_11s[i].device)
+        loss_Q_11 = loss_Q_11 + 0.5 * (((player.Q_11s[i]-target_Q_11)**2)*loss_mask)
         
         #loss a21
         target_Q_21 = gamma2 * target_Q_21 + player.Q_11s[i].detach()
