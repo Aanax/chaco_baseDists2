@@ -143,6 +143,9 @@ class Agent(object):
         
         self.Q_11s.append(Q_11)
         self.Q_21s.append(Q_21)
+        self.Q_22s.append(Q_22)
+        self.a_22s.append(a_22)
+        
         self.state = torch.from_numpy(state).float()
         if self.gpu_id >= 0:
             with torch.cuda.device(self.gpu_id):
@@ -294,6 +297,7 @@ class Agent(object):
         self.Q_11s = []
         self.Q_21s = []
         self.Q_22s = []
+        self.a_22s = []
         self.states1 = []
         
         self.Vs_wave = []

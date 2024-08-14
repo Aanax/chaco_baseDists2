@@ -220,12 +220,12 @@ class Level2(nn.Module):
         hx, cx = self.ConvLSTM_mu(s, (hx2,cx2)) #(states[0][0][0],states[0][1][0]))
         S = self.decoder(hx) #self.oracle(hx)
         z = hx.view(hx.size(0), -1)
-        v = self.critic(z)
+        v2 = self.critic(z)
         Q_22 = self.actor(z)
         
         pi = F.softmax(Q_22)
-        V_wave = (pi*Q_22).sum()
+        V_wave = v2 #(pi*Q_22).sum()
         
         a_22 = F.relu(Q_22-V_wave.detach())
-        a_21 = self.actor_base(a_22.view(a_22.size(0), -1))
-        return kl, v, a_21, a_22, Q_22, hx,cx,s,S, V_wave
+        Q_21 = self.actor_base(a_22.view(a_22.size(0), -1))
+        return kl, v2, Q_21, a_22, Q_22, hx,cx,s,S, V_wave

@@ -353,8 +353,8 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         restoration_loss1_part = (player.restoreds1[i] - player.restore_labels1[i]).pow(2).sum()
         restoration_loss1 += restoration_loss1_part #*(abs(D1) + abs(D2))
         
-        V1_corr = player.values1[i].detach()+D1
-        V2_corr = player.values2[i].detach()+D2
+#         V1_corr = player.values1[i].detach()+D1
+#         V2_corr = player.values2[i].detach()+D2
         
         #loss a11
         target_Q_11 = player.rewards1[i]
@@ -366,10 +366,19 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         #loss a21
         target_Q_21 = gamma2 * target_Q_21 + player.Q_11s[i].detach()
         advantage_Q_21 = target_Q_21 - player.Q_21s[i]
-        loss_Q_21 = loss_Q_21 + 0.5 * advantage_Q_21.pow(2)#.sum()
+        loss_Q_21 = loss_Q_21 + 0.5 * advantage_Q_21.pow(2)*(1-gamma1)
+        
+        
+#         loss_mask = torch.zeros((1,8))
+#         loss_mask[player.a_22s[i]>0] = 1
+#         loss_mask = loss_mask.to(player.Q_22s[i].device)
+        
+        target_Q_22 = gamma2 * target_Q_22 + player.Vs1[i].detach()
+        advantage_Q_22 = target_Q_22 - player.Q_22s[i]
+        loss_Q_22 = loss_Q_22 + 0.5 * (advantage_Q_22.pow(2)*(1-gamma1))
         
         #value loss
-        V_last2 = gamma2 * V_last2 + (1-gamma1)*V1_corr
+        V_last2 = gamma2 * V_last2 + (1-gamma1)*player.values1[i].detach()
         advantage2 = V_last2 - player.values2[i]
         value_loss2 = value_loss2 + 0.5 * advantage2.pow(2)
         
