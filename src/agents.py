@@ -126,7 +126,7 @@ class Agent(object):
             
             self.Q_21_prev = Q_21
             
-            self.Vs_wave.append(V_wave.item())
+            self.Vs_wave.append(V_wave)
             action_probs = F.softmax(Q_11+Q_21)
             action1 = action_probs.multinomial(1).data
             self.actions.append(action1)

@@ -314,6 +314,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
     loss_Q_22 = 0
     loss_Q_11 = 0
     target_Q_21 = 0
+    target_Q_22 = 0
     kld_loss_actor2 = 0
     V1_runningmean=0
     restoration_loss1=0
@@ -373,7 +374,7 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
 #         loss_mask[player.a_22s[i]>0] = 1
 #         loss_mask = loss_mask.to(player.Q_22s[i].device)
         
-        target_Q_22 = gamma2 * target_Q_22 + player.Vs1[i].detach()
+        target_Q_22 = gamma2 * target_Q_22 + player.Vs_wave[i].detach()
         advantage_Q_22 = target_Q_22 - player.Q_22s[i]
         loss_Q_22 = loss_Q_22 + 0.5 * (advantage_Q_22.pow(2)*(1-gamma1))
         
@@ -387,5 +388,5 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         value_loss1 = value_loss1 + 0.5 * advantage1.pow(2)
         
 
-    return kld_loss1, restoration_loss1, loss_Q_11, value_loss1*0, kld_loss2, loss_Q_21, value_loss2*0, S_loss2
+    return kld_loss1, restoration_loss1, loss_Q_11, value_loss1, kld_loss2, loss_Q_21, value_loss2, S_loss2
 
