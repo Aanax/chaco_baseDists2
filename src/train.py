@@ -186,18 +186,22 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 
 #             kld_loss1, policy_loss1, value_loss1, MPDI_loss1, kld_loss2, policy_loss2, value_loss2, MPDI_loss2, policy_loss_base, kld_loss_actor2, loss_restoration1,loss_restoration2, ce_loss1, ce_loss_base = losses
             
-            kld_loss1, restoration_loss1, loss_Q_11, value_loss1, kld_loss2, loss_Q_21, value_loss2, S_loss2 = losses
+            kld_loss1, restoration_loss1, loss_Q_11, value_loss1, kld_loss2, loss_Q_21, value_loss2, S_loss2, loss_Q_22 = losses
             
             losses = list(losses)
             loss_Q11_non_summed_components = loss_Q_11
             loss_Q21_non_summed_components = loss_Q_21
+            loss_Q22_non_summed_components = loss_Q_22
             
             loss_Q_11 = loss_Q_11.sum()
             loss_Q_21 = loss_Q_21.sum()
+            loss_Q_22 = loss_Q_22.sum()
+            
             losses[2] = loss_Q_11
             losses[5] = loss_Q_21
+            losses[8] = loss_Q_22
             loss1 = (args["Training"]["w_policy"]*loss_Q_11+args["Training"]["w_value"]*value_loss1)
-            loss2 = (args["Training"]["w_policy"]*loss_Q_21+args["Training"]["w_value"]*value_loss2)
+            loss2 = (args["Training"]["w_policy"]*loss_Q_21+args["Training"]["w_value"]*value_loss2+args["Training"]["w_policy"]*loss_Q_22)
 
             loss1 += args["Training"]["w_kld"]*kld_loss1
             loss2 += args["Training"]["w_kld"]*kld_loss2
@@ -209,6 +213,15 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             mean_V2 = torch.mean(torch.Tensor(player.values2)).cpu().numpy()
             mean_Vs_wave = torch.mean(torch.Tensor(player.Vs_wave)).cpu().numpy()
             mean_re1 = float(np.mean(player.rewards1))
+            max_Q11_1 = torch.max(torch.Tensor([ii[0][0] for ii in player.Q_11s]))
+            max_Q11_2 = torch.max(torch.Tensor([ii[0][1] for ii in player.Q_11s]))
+            max_Q11_3 = torch.max(torch.Tensor([ii[0][2] for ii in player.Q_11s]))
+            max_Q21_1 = torch.max(torch.Tensor([ii[0][0] for ii in player.Q_21s]))
+            max_Q21_2 = torch.max(torch.Tensor([ii[0][1] for ii in player.Q_21s]))
+            max_Q21_3 = torch.max(torch.Tensor([ii[0][2] for ii in player.Q_21s]))
+            max_Q22_1 = torch.max(torch.Tensor([ii[0][0] for ii in player.Q_22s]))
+            max_Q22_2 = torch.max(torch.Tensor([ii[0][1] for ii in player.Q_22s]))
+            max_Q22_3 = torch.max(torch.Tensor([ii[0][2] for ii in player.Q_22s]))
 
             additional_logs = []
 
@@ -233,7 +246,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             
             f = open(STATS_CSV_PATH, 'a')
             writer = csv.writer(f)
-            writer.writerow([mean_Vs_wave, mean_re1, counter.value, local_counter]+additional_logs)
+            writer.writerow([mean_Vs_wave, mean_re1, counter.value, local_counter, max_Q11_1, max_Q11_2, max_Q11_3, max_Q21_1, max_Q21_2, max_Q21_3, max_Q22_1, max_Q22_2, max_Q22_3]+additional_logs)
             f.close()
             
             
@@ -354,9 +367,6 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         restoration_loss1_part = (player.restoreds1[i] - player.restore_labels1[i]).pow(2).sum()
         restoration_loss1 += restoration_loss1_part #*(abs(D1) + abs(D2))
         
-#         V1_corr = player.values1[i].detach()+D1
-#         V2_corr = player.values2[i].detach()+D2
-        
         #loss a11
         target_Q_11 = player.rewards1[i]
         loss_mask = torch.zeros((1,6))
@@ -365,10 +375,9 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         loss_Q_11 = loss_Q_11 + 0.5 * (((player.Q_11s[i]-target_Q_11)**2)*loss_mask)
         
         #loss a21
-        target_Q_21 = gamma2 * target_Q_21 + player.Q_11s[i].detach()
+        target_Q_21 = gamma2 * target_Q_21 + (1-gamma1)*player.Q_11s[i].detach()
         advantage_Q_21 = target_Q_21 - player.Q_21s[i]
-        loss_Q_21 = loss_Q_21 + 0.5 * advantage_Q_21.pow(2)*(1-gamma1)
-        
+        loss_Q_21 = loss_Q_21 + 0.5 * advantage_Q_21.pow(2)
         
         loss_mask = torch.zeros((1,8))
         loss_mask[player.a_22s[i]>0] = 1
@@ -386,7 +395,6 @@ def train_A3C_united(player, V_last1, V_last2, S_last1, S_last2, tau, gamma1, ga
         V_last1 = gamma1 * V_last1 + player.rewards1[i]
         advantage1 = V_last1 - player.values1[i]
         value_loss1 = value_loss1 + 0.5 * advantage1.pow(2)
-        
 
-    return kld_loss1, restoration_loss1, loss_Q_11, value_loss1, kld_loss2, loss_Q_21, value_loss2, S_loss2
+    return kld_loss1, restoration_loss1, loss_Q_11, value_loss1, kld_loss2, loss_Q_21, value_loss2, S_loss2, loss_Q_22
 
