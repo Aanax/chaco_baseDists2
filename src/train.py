@@ -208,20 +208,22 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 
             loss2 += args["Training"]["w_MPDI"]*S_loss2
 
-
+            def get_max_with_abs(tensor1d):
+                arg = torch.argmax(torch.abs(tensor1d))
+                return tensor1d[arg].item()
 #             mean_V1 = torch.mean(torch.Tensor(player.values1)).cpu().numpy()
 #             mean_V2 = torch.mean(torch.Tensor(player.values2)).cpu().numpy()
             mean_Vs_wave = torch.mean(torch.Tensor(player.Vs_wave)).cpu().numpy()
             mean_re1 = float(np.mean(player.rewards1))
-            max_Q11_1 = torch.max(torch.Tensor([ii[0][0] for ii in player.Q_11s]))
-            max_Q11_2 = torch.max(torch.Tensor([ii[0][1] for ii in player.Q_11s]))
-            max_Q11_3 = torch.max(torch.Tensor([ii[0][2] for ii in player.Q_11s]))
-            max_Q21_1 = torch.max(torch.Tensor([ii[0][0] for ii in player.Q_21s]))
-            max_Q21_2 = torch.max(torch.Tensor([ii[0][1] for ii in player.Q_21s]))
-            max_Q21_3 = torch.max(torch.Tensor([ii[0][2] for ii in player.Q_21s]))
-            max_Q22_1 = torch.max(torch.Tensor([ii[0][0] for ii in player.Q_22s]))
-            max_Q22_2 = torch.max(torch.Tensor([ii[0][1] for ii in player.Q_22s]))
-            max_Q22_3 = torch.max(torch.Tensor([ii[0][2] for ii in player.Q_22s]))
+            max_Q11_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_11s]))
+            max_Q11_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_11s]))
+            max_Q11_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_11s]))
+            max_Q21_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_21s]))
+            max_Q21_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_21s]))
+            max_Q21_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_21s]))
+            max_Q22_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_22s]))
+            max_Q22_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_22s]))
+            max_Q22_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_22s]))
 
             additional_logs = []
 
@@ -276,8 +278,8 @@ def MPDI_loss_calc1(player, V_last1, S_last1, tau, gamma1, adaptive, i):
 
 def MPDI_loss_calc2(player, V_last2, S_last2, tau, gamma2, adaptive, i):
     #Discounted Features rewards (s - after encoding S-after lstm)
-    S_last2 = S_last2*gamma2 + player.ss1[i].detach()
-    S_advantage2 = (1-gamma2)*S_last2-player.Ss2[i]
+    S_last2 = S_last2*gamma2 + (1-gamma2)*player.ss1[i].detach()
+    S_advantage2 = S_last2-player.Ss2[i]
     return S_last2, 0.5 * S_advantage2.pow(2).sum()
 
 def _kld_loss_calc(player, i):
