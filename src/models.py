@@ -62,6 +62,9 @@ class Encoder(nn.Module):
     def forward(self, x):
         
         x = F.relu(self.maxp1(self.conv1(x)))
+        
+        x = T.cat((x.view(x.size(0), -1), previous_action),1)
+        
         mu = self.maxp11(self.conv11(x))
         logvar = self.maxp11_logvar(self.conv11_logvar(x))
 
@@ -103,10 +106,10 @@ class Level1(nn.Module):
         self.train()
         self.z_EMA_t = 0
 
-    def forward(self, x):
+    def forward(self, previous_action):
 #          = x
         
-        s, kl = self.encoder(x)
+        s, kl = self.encoder(x, previous_action)
        
         decoded = self.decoder(s)
                 
