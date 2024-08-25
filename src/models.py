@@ -19,15 +19,32 @@ class Decoder(nn.Module):
     def __init__(self, args, device):#1024
         super(Decoder, self).__init__()
         
-        self.deconv1 = nn.ConvTranspose2d(32, 16, 6, stride=2, padding=2)
+        self.deconv1 = nn.ConvTranspose2d(38, 16, 6, stride=2, padding=2)
         self.deconv3 = nn.ConvTranspose2d(16, 1, 6, stride=2, padding=2)
 
-    def forward(self,x):
+    def forward(self,x, previous_action):
+        
+        previous_action = previous_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,20,20)).detach()
+        x = torch.cat([x,previous_action], dim=1)
+        
         x = self.deconv1(x)
         x = self.deconv3(x)
 
         return x 
 
+class Oracle(nn.Module):
+    def __init__(self, args, device):#1024
+        super(Oracle, self).__init__()
+        
+        self.conv = nn.Conv2d(38, 32, 5, stride=1, padding=2)
+
+    def forward(self,x, previous_action):
+        
+        previous_action = previous_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,20,20)).detach()
+        x = torch.cat([x,previous_action], dim=1)        
+        x = self.conv(x)
+        
+        return x 
 
 class Encoder(nn.Module):
     def __init__(self, args, device):#1024
@@ -63,7 +80,7 @@ class Encoder(nn.Module):
         
         x = F.relu(self.maxp1(self.conv1(x)))
         
-        x = T.cat((x.view(x.size(0), -1), previous_action),1)
+#         x = T.cat((x.view(x.size(0), -1), previous_action),1)
         
         mu = self.maxp11(self.conv11(x))
         logvar = self.maxp11_logvar(self.conv11_logvar(x))
@@ -72,6 +89,7 @@ class Encoder(nn.Module):
         s = mu + T.exp(logvar / 2) * z_t #self.z_EMA_t
         
         kl = -0.5*(1 + logvar - mu**2 - T.exp(logvar)).sum() # + mu.detach()**2
+        
 
         
         return s, kl
@@ -84,6 +102,7 @@ class Level1(nn.Module):
         
 #         self.oracle = Oracle({},device)
         self.decoder = Decoder({}, device)
+        self.oracle = Oracle({}, device)
         self.encoder = Encoder(args, device)
         self.actor = nn.Linear(12800, 6)
         self.critic = nn.Linear(12800, 1)
@@ -106,22 +125,27 @@ class Level1(nn.Module):
         self.train()
         self.z_EMA_t = 0
 
-    def forward(self, previous_action):
+    def forward(self,x, previous_action):
 #          = x
         
-        s, kl = self.encoder(x, previous_action)
+        s, kl = self.encoder(x)
        
-        decoded = self.decoder(s)
+        decoded = self.decoder(s, previous_action)
                 
+        S = self.oracle(s.detach(), previous_action.detach())
+        
         z = s.view(s.size(0), -1)
-        v = self.critic(z)
-        actor_in = z.view(z.size(0), -1) #T.cat((z.view(z.size(0), -1), a2_prev.view(a2_prev.size(0), -1)),1)
-        a = self.actor(actor_in)
+#         v = self.critic(z)
+        v=None
+        
+        z = S.detach()-s
+        actor_in = z.view(z.size(0), -1)
+        Q11 = self.actor(actor_in)
         
 #         hx, cx = self.ConvLSTM_mu(s, (hx1,cx1), prev_action_logits, prev_action1_logits)
 #         S = self.oracle(hx)
         
-        return kl,decoded,v,a, s #, hx, cx, s,S  
+        return kl,decoded,v,Q11, s, S #, hx, cx, s,S  
 
 class Decoder2(nn.Module):
     def __init__(self, args, device):#1024
@@ -135,6 +159,16 @@ class Decoder2(nn.Module):
         x = self.deconv2(x)
         return x
 
+class Oracle2(nn.Module):
+    def __init__(self, args, device):#1024
+        super(Oracle2, self).__init__()
+        
+        self.conv = nn.Conv2d(64, 64, 5, stride=1, padding=2)
+
+    def forward(self,x):
+        x = self.conv(x)
+        return x
+    
 class Encoder2(nn.Module):
     def __init__(self, args, device):#1024
         super(Encoder2, self).__init__()
@@ -143,7 +177,7 @@ class Encoder2(nn.Module):
         self.gamma2 = float(args["Training"]["initial_gamma2"])
 #         self.Layernorm = nn.LayerNorm([38,20,20])        
 #         #20 - 10 - 5
-        self.conv1 = nn.Conv2d(38, 64, 5, stride=1, padding=2)
+        self.conv1 = nn.Conv2d(32, 64, 5, stride=1, padding=2)
         self.maxp1 = nn.MaxPool2d(2, 2)
         
         self.conv2 = nn.Conv2d(64, 64, 5, stride=1, padding=2)
@@ -183,16 +217,16 @@ class Level2(nn.Module):
         super(Level2, self).__init__()
         
         self.encoder = Encoder2(args, device)
-#         self.oracle = Oracle2({},device)
+        self.oracle = Oracle2({},device)
         self.decoder = Decoder2({}, device)
         self.actor = nn.Linear(64*5*5, 8) #Actor2(args,device)
         self.actor_base = nn.Linear(8, 6)
         self.critic = nn.Linear(64*5*5, 1)
         #32x40x40
-        self.ConvLSTM_mu = ConvLSTMCell(input_dim=64, #withAbase
+        self.ConvLSTM_mu = ConvLSTMwithAbaseCell(input_dim=64, #withAbase
                                  hidden_dim=64,
                                  kernel_size=(5, 5),
-#                                  num_actions=8,
+                                 num_actions=8,
                                  bias=True,
                                        )
         for m in self.children():
@@ -217,18 +251,32 @@ class Level2(nn.Module):
         self.z_EMA_t = 0
         
     def forward(self, x, hx2, cx2, prev_action): 
-        prev_action = prev_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,20,20)).detach()
-        x = torch.cat([x,prev_action], dim=1)
+        
+#         x = torch.cat(x, dim=1)
         s, kl = self.encoder(x)
-        hx, cx = self.ConvLSTM_mu(s, (hx2,cx2)) #(states[0][0][0],states[0][1][0]))
-        S = self.decoder(hx) #self.oracle(hx)
-        z = hx.view(hx.size(0), -1)
+        
+        decoded = self.decoder(s)
+        
+#         print(prev_action.shape)
+#         prev_action = prev_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,8,5,5)).detach()
+        hx, cx = self.ConvLSTM_mu(s, (hx2,cx2), prev_action) #(states[0][0][0],states[0][1][0]))
+        S = self.oracle(hx)
+        
+        print(S.shape)
+        
+        z = S.detach() - s
+        
+        z = z.view(z.size(0), -1)
+        
         v2 = self.critic(z)
+        
         Q_22 = self.actor(z)
         
-        pi = F.softmax(Q_22)
+#         pi = F.softmax(Q_22)
         V_wave = v2 #(pi*Q_22).sum()
         
-        a_22 = F.relu(Q_22-V_wave.detach())
+        a_22 = T.sign(Q_22-V_wave.detach())
+        
         Q_21 = self.actor_base(a_22.view(a_22.size(0), -1))
-        return kl, v2, Q_21, a_22, Q_22, hx,cx,s,S, V_wave
+        
+        return kl, decoded, v2, Q_21, a_22, Q_22, hx,cx,s,S, V_wave
