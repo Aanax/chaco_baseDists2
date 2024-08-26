@@ -248,7 +248,7 @@ class Agent(object):
                 self.state.unsqueeze(0)), self.prev_action)
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
-            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, V_wave = self.model2(s1.detach(), self.hx2, self.cx2, self.a_22_prev)
+            kld2, x_restored2,  v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, V_wave = self.model2(s1.detach(), self.hx2, self.cx2, self.a_22_prev)
             
 #             self.Q_21_prev = Q_21
             self.a_22_prev = a_22

@@ -265,7 +265,7 @@ class Level2(nn.Module):
         
 #         print(prev_action.shape)
 #         prev_action = prev_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,8,5,5)).detach()
-        hx, cx = self.ConvLSTM_mu2(s, (hx2,cx2), prev_action) #(states[0][0][0],states[0][1][0]))
+        hx, cx = self.ConvLSTM_mu2(s.detach(), (hx2,cx2), prev_action.detach()) #(states[0][0][0],states[0][1][0]))
     
         S = self.oracle2(hx)
         
@@ -282,8 +282,8 @@ class Level2(nn.Module):
 #         pi = F.softmax(Q_22)
         V_wave = v2 #(pi*Q_22).sum()
         
-        a_22 = T.sign(Q_22-V_wave.detach())
+        a_22 = ((Q_22-V_wave.detach())>=0).float()
         
-        Q_21 = self.actor_base2(a_22.view(a_22.size(0), -1))
+        Q_21 = self.actor_base2(a_22.view(a_22.size(0), -1).detach())
         
         return kl, decoded, v2, Q_21, a_22, Q_22, hx,cx,s,S, V_wave
