@@ -169,11 +169,11 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
         if not player.done:
             state = player.state
             kld1, x_restored1, v1, Q_11, s1, S1 = player.model1(Variable(
-            state.unsqueeze(0)))
+            state.unsqueeze(0)), player.prev_action)
             
-            kld2, v2, Q_21, a_22, Q_22, player.hx2, player.cx2, s2, S2, V_wave = player.model2(s1.detach(), player.hx2, player.cx2, player.Q_21_prev)
+            kld2, x_restored2, v2, Q_21, a_22, Q_22, player.hx2, player.cx2, s2, S2, V_wave = player.model2(s1.detach(), player.hx2, player.cx2, player.a_22_prev)
             player.train_episodes_run+=1
-            V_last1 = v1.detach()
+            V_last1 = 0 #v1.detach()
             V_last2 = v2.detach()
             s_last1 = s1#S1.detach()
             S_last2 = S2.detach()
@@ -186,7 +186,8 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 
 #             kld_loss1, policy_loss1, value_loss1, MPDI_loss1, kld_loss2, policy_loss2, value_loss2, MPDI_loss2, policy_loss_base, kld_loss_actor2, loss_restoration1,loss_restoration2, ce_loss1, ce_loss_base = losses
             
-            kld_loss1, restoration_loss1, loss_Q_11, value_loss1, kld_loss2, loss_Q_21, value_loss2, S_loss2, loss_Q_22 = losses
+            #value_loss1,
+            kld_loss1, restoration_loss1, loss_Q_11,  kld_loss2, loss_Q_21, value_loss2, S_loss2, loss_Q_22, S_loss1, restoration_loss2 = losses
             
             losses = list(losses)
             loss_Q11_non_summed_components = loss_Q_11
@@ -198,15 +199,17 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             loss_Q_22 = loss_Q_22.sum()
             
             losses[2] = loss_Q_11
-            losses[5] = loss_Q_21
-            losses[8] = loss_Q_22
-            loss1 = (args["Training"]["w_policy"]*loss_Q_11+args["Training"]["w_value"]*value_loss1)
+            losses[4] = loss_Q_21
+            losses[7] = loss_Q_22
+            loss1 = (args["Training"]["w_policy"]*loss_Q_11)#+args["Training"]["w_value"]*value_loss1)
             loss2 = (args["Training"]["w_policy"]*loss_Q_21+args["Training"]["w_value"]*value_loss2+args["Training"]["w_policy"]*loss_Q_22)
 
             loss1 += args["Training"]["w_kld"]*kld_loss1
             loss2 += args["Training"]["w_kld"]*kld_loss2
 
-            loss2 += args["Training"]["w_MPDI"]*S_loss2
+#             loss2 += args["Training"]["w_MPDI"]*S_loss2
+#             loss1 += args["Training"]["w_MPDI"]*S_loss1
+            
 
             def get_max_with_abs(tensor1d):
                 arg = torch.argmax(torch.abs(tensor1d))
@@ -253,11 +256,17 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             
             
             loss_restoration1 = args["Training"]["w_restoration"] * restoration_loss1
-#             loss_restoration2 = args["Training"]["w_restoration"] * loss_restoration2
+            loss_restoration2 = args["Training"]["w_restoration"] * restoration_loss2
             loss_restoration1.backward(retain_graph=True)
-#             loss_restoration2.backward(retain_graph=True)
+            loss_restoration2.backward(retain_graph=True)
+            
+            S_loss1 = args["Training"]["w_MPDI"]*S_loss1
+            S_loss2 = args["Training"]["w_MPDI"]*S_loss2
+        
+            S_loss2.backward(retain_graph=True)
+            S_loss1.backward(retain_graph=True)
 
-            loss1.backward(retain_graph=True)
+            loss1.backward(retain_graph=False)
             loss2.backward(retain_graph=False)
 
             ensure_shared_grads(player.model1, shared_model[0], gpu=gpu_id >= 0)
@@ -279,10 +288,11 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 def MPDI_loss_calc2(player, V_last2, S_last2, tau, gamma2, adaptive, i):
     #Discounted Features rewards (s - after encoding S-after lstm)
     try:
-        S_last2 = S_last2*gamma2 + (1-gamma2)*player.ss1[i+1].detach()
+        S_last2 = S_last2*gamma2 + (1-gamma2)*player.ss2[i+1].detach()
         S_advantage2 = S_last2-player.Ss2[i]
         return S_last2, 0.5 * S_advantage2.pow(2).sum()
-    except:
+    except Exception as e:
+#         print(e, flush=True)
         return S_last2, 0
     
 
@@ -348,7 +358,7 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, S_last2, tau, gamma1, ga
     VD_runningmeans = []
     
     T = len(player.rewards1)
-    player.ss.append(s_last1)
+    player.ss1.append(s_last1)
     
     for i in reversed(range(len(player.rewards1))):
         #restoration_loss
@@ -357,17 +367,20 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, S_last2, tau, gamma1, ga
         
         S_loss1 += 0.5*((player.Ss1[i]-player.ss1[i+1])**2).sum()
         
-        delta_t1 = player.rewards1[i] + gamma1 * \
-            player.values1[i + 1].data - player.values1[i].data
+#         delta_t1 = player.rewards1[i] + gamma1 * \
+#             player.values1[i + 1].data - player.values1[i].data
         
-        D1 = D1*gamma1 + delta_t1
+#         D1 = D1*gamma1 + delta_t1
         
         # Generalized Advantage Estimataion
-        delta_t2 = (1-gamma1)*(player.values1[i].detach()+D1) + gamma2 * \
+#         delta_t2 = (1-gamma1)*(player.values1[i].detach()+D1) + gamma2 * \
+#             player.values2[i + 1].data - player.values2[i].data
+
+        delta_t2 = player.rewards1[i] + gamma2 * \
             player.values2[i + 1].data - player.values2[i].data
         
         D2 = D2*gamma2 + delta_t2
-        v2_corr = player.vs2[i]+D2
+        v2_corr = player.values2[i]+D2
                 
         #KL loss
         kld_delta1, kld_delta2 = kld_loss_calc(player, i)
@@ -392,13 +405,11 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, S_last2, tau, gamma1, ga
 #         #gamma2 * target_Q_21 + (1-gamma1)*player.Q_11s[i].detach()
 #         advantage_Q_21 = target_Q_21 - player.Q_21s[i]
 
-        
-
         loss_Q_21 +=  0.5 * ((player.Q_21s[i] - v2_corr).pow(2)).sum()*loss_mask
         
         loss_mask_Q22 = torch.zeros((1,8))
-        loss_mask2_Q22[player.a_22s[i]>0] = 1
-        loss_mask2_Q22 = loss_mask.to(player.Q_22s[i].device)
+        loss_mask_Q22[player.a_22s[i]>0] = 1
+        loss_mask_Q22 = loss_mask.to(player.Q_22s[i].device)
         
 #         target_Q_22 = gamma2 * target_Q_22 + (1-gamma1)*player.values1[i].detach()
 #         advantage_Q_22 = target_Q_22 - player.Q_22s[i]
@@ -406,13 +417,16 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, S_last2, tau, gamma1, ga
         loss_Q_22 +=  0.5 * ((player.Q_22s[i] - v2_corr).pow(2)).sum()*loss_mask_Q22
         
         #value loss
-        V_last2 = gamma2 * V_last2 + (1-gamma1)*player.values1[i].detach()
+        V_last2 = gamma2 * V_last1 + (1-gamma1)*player.rewards1[i]
+        #gamma2 * V_last2 + (1-gamma1)*player.values1[i].detach()
         advantage2 = V_last2 - player.values2[i]
         value_loss2 = value_loss2 + 0.5 * advantage2.pow(2)
         
-        V_last1 = gamma1 * V_last1 + player.rewards1[i]
-        advantage1 = V_last1 - player.values1[i]
-        value_loss1 = value_loss1 + 0.5 * advantage1.pow(2)
+#         V_last1 = gamma1 * V_last1 + player.rewards1[i]
+#         advantage1 = V_last1 - player.values1[i]
+#         value_loss1 = value_loss1 + 0.5 * advantage1.pow(2)
 
-    return kld_loss1, restoration_loss1, loss_Q_11, value_loss1, kld_loss2, loss_Q_21, value_loss2, S_loss2, loss_Q_22
+
+    #value_loss1*0,
+    return kld_loss1, restoration_loss1, loss_Q_11,  kld_loss2, loss_Q_21, value_loss2, S_loss2, loss_Q_22, S_loss1, restoration_loss2
 

@@ -45,7 +45,7 @@ class Agent(object):
         self.S2_prev = torch.zeros((1,args["Model"]["S2_dim"])).to("cuda:"+str(gpu_id))
         
         self.a1_prev = torch.zeros((1,env.action_space.n)).to("cuda:"+str(gpu_id))
-        self.prev_action = torch.zeros((1,6))
+        self.prev_action = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
         self.Q_21_prev = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
         self.a_22_prev = torch.zeros((1,8)).to("cuda:"+str(gpu_id))
         
@@ -127,14 +127,14 @@ class Agent(object):
             kld2, x_restored2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, V_wave = self.model2(s1.detach(), self.hx2, self.cx2, self.a_22_prev)
             
 #             self.Q_21_prev = Q_21
-            self.a_22_prev = a_22
+            self.a_22_prev = a_22.to(Q_22.device)
             
             self.Vs_wave.append(V_wave)
             action_probs = F.softmax(Q_11+Q_21)
             action1 = action_probs.multinomial(1).data
             self.actions.append(action1)
             
-            self.prev_action = torch.zeros((1,6))
+            self.prev_action = torch.zeros((1,6)).to(Q_11.device)
             self.prev_action[0][action1.item()] = 1
             self.prev_action = self.prev_action.to(Q_11.device)
            
@@ -142,7 +142,7 @@ class Agent(object):
             self.train_episodes_run+=1
             self.train_episodes_run_2+=1
             self.restoreds1.append(x_restored1)
-            self.restoreds1.append(x_restored2)
+            self.restoreds2.append(x_restored2)
             self.restore_labels1.append(self.state.unsqueeze(0).detach())
             self.restore_labels2.append(s1.detach())
         
@@ -245,10 +245,10 @@ class Agent(object):
                 self.cx2 = self.cx2.data
                 
             kld1, x_restored1, v1, Q_11, s1, S1 = self.model1(Variable(
-                self.state.unsqueeze(0)), )
+                self.state.unsqueeze(0)), self.prev_action)
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
-            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, V_wave = self.model2(s1.detach(), self.hx2, self.cx2, self.Q_21_prev)
+            kld2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, V_wave = self.model2(s1.detach(), self.hx2, self.cx2, self.a_22_prev)
             
 #             self.Q_21_prev = Q_21
             self.a_22_prev = a_22

@@ -19,16 +19,21 @@ class Decoder(nn.Module):
     def __init__(self, args, device):#1024
         super(Decoder, self).__init__()
         
-        self.deconv1 = nn.ConvTranspose2d(38, 16, 6, stride=2, padding=2)
+        self.deconv1 = nn.ConvTranspose2d(32, 16, 6, stride=2, padding=2)
         self.deconv3 = nn.ConvTranspose2d(16, 1, 6, stride=2, padding=2)
 
-    def forward(self,x, previous_action):
+    def forward(self,x):
         
-        previous_action = previous_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,20,20)).detach()
-        x = torch.cat([x,previous_action], dim=1)
+#         previous_action = previous_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,20,20)).detach()
+#         x = torch.cat([x,previous_action], dim=1)
+
+#         print("DECODER 1 x shape in ", x.shape, flush=True)
         
         x = self.deconv1(x)
+        
+#         print("DECODER 1 x shape2 ", x.shape, flush=True)
         x = self.deconv3(x)
+#         print("DECODER 1 x shape3 ", x.shape, flush=True)
 
         return x 
 
@@ -105,7 +110,7 @@ class Level1(nn.Module):
         self.oracle = Oracle({}, device)
         self.encoder = Encoder(args, device)
         self.actor = nn.Linear(12800, 6)
-        self.critic = nn.Linear(12800, 1)
+#         self.critic = nn.Linear(12800, 1)
        
         for m in self.children():
             if not hasattr(m,"name"):
@@ -118,9 +123,9 @@ class Level1(nn.Module):
         self.actor.weight.data, args["Model"]["a_init_std"])
         self.actor.bias.data.fill_(0)
         
-        self.critic.weight.data = norm_col_init(
-        self.critic.weight.data, args["Model"]["v_init_std"])
-        self.critic.bias.data.fill_(0) 
+#         self.critic.weight.data = norm_col_init(
+#         self.critic.weight.data, args["Model"]["v_init_std"])
+#         self.critic.bias.data.fill_(0) 
 
         self.train()
         self.z_EMA_t = 0
@@ -130,7 +135,7 @@ class Level1(nn.Module):
         
         s, kl = self.encoder(x)
        
-        decoded = self.decoder(s, previous_action)
+        decoded = self.decoder(s)
                 
         S = self.oracle(s.detach(), previous_action.detach())
         
@@ -145,6 +150,7 @@ class Level1(nn.Module):
 #         hx, cx = self.ConvLSTM_mu(s, (hx1,cx1), prev_action_logits, prev_action1_logits)
 #         S = self.oracle(hx)
         
+#         print("DECODEd shape ", decoded.shape, flush=True)
         return kl,decoded,v,Q11, s, S #, hx, cx, s,S  
 
 class Decoder2(nn.Module):
@@ -216,14 +222,14 @@ class Level2(nn.Module):
     def __init__(self, args, shap, n_actions, device):
         super(Level2, self).__init__()
         
-        self.encoder = Encoder2(args, device)
-        self.oracle = Oracle2({},device)
-        self.decoder = Decoder2({}, device)
-        self.actor = nn.Linear(64*5*5, 8) #Actor2(args,device)
-        self.actor_base = nn.Linear(8, 6)
-        self.critic = nn.Linear(64*5*5, 1)
+        self.encoder2 = Encoder2(args, device)
+        self.oracle2 = Oracle2({},device)
+        self.decoder2 = Decoder2({}, device)
+        self.actor2 = nn.Linear(64*5*5, 8) #Actor2(args,device)
+        self.actor_base2 = nn.Linear(8, 6)
+        self.critic2 = nn.Linear(64*5*5, 1)
         #32x40x40
-        self.ConvLSTM_mu = ConvLSTMwithAbaseCell(input_dim=64, #withAbase
+        self.ConvLSTM_mu2 = ConvLSTMwithAbaseCell(input_dim=64, #withAbase
                                  hidden_dim=64,
                                  kernel_size=(5, 5),
                                  num_actions=8,
@@ -232,18 +238,18 @@ class Level2(nn.Module):
         for m in self.children():
             if not hasattr(m,"name"):
                 m.name = None
-        self.decoder.apply(init_decoder) #CHECK IF WORKS
-        self.ConvLSTM_mu.apply(init_base)            
-        self.actor.weight.data = norm_col_init(
-        self.actor.weight.data, 0.1)#args["Model"]["a_init_std"])
-        self.actor.bias.data.fill_(0)
-        self.actor_base.weight.data = norm_col_init(
-        self.actor_base.weight.data, 0.2)#args["Model"]["a_init_std"])
-        self.actor_base.bias.data.fill_(0)
+        self.decoder2.apply(init_decoder) #CHECK IF WORKS
+        self.ConvLSTM_mu2.apply(init_base)            
+        self.actor2.weight.data = norm_col_init(
+        self.actor2.weight.data, 0.1)#args["Model"]["a_init_std"])
+        self.actor2.bias.data.fill_(0)
+        self.actor_base2.weight.data = norm_col_init(
+        self.actor_base2.weight.data, 0.2)#args["Model"]["a_init_std"])
+        self.actor_base2.bias.data.fill_(0)
         
-        self.critic.weight.data = norm_col_init(
-        self.critic.weight.data, args["Model"]["v_init_std"])
-        self.critic.bias.data.fill_(0) 
+        self.critic2.weight.data = norm_col_init(
+        self.critic2.weight.data, args["Model"]["v_init_std"])
+        self.critic2.bias.data.fill_(0) 
         
         self.train()
         self.s_mean=0
@@ -253,30 +259,31 @@ class Level2(nn.Module):
     def forward(self, x, hx2, cx2, prev_action): 
         
 #         x = torch.cat(x, dim=1)
-        s, kl = self.encoder(x)
+        s, kl = self.encoder2(x)
         
-        decoded = self.decoder(s)
+        decoded = self.decoder2(s)
         
 #         print(prev_action.shape)
 #         prev_action = prev_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,8,5,5)).detach()
-        hx, cx = self.ConvLSTM_mu(s, (hx2,cx2), prev_action) #(states[0][0][0],states[0][1][0]))
-        S = self.oracle(hx)
+        hx, cx = self.ConvLSTM_mu2(s, (hx2,cx2), prev_action) #(states[0][0][0],states[0][1][0]))
+    
+        S = self.oracle2(hx)
         
-        print(S.shape)
+#         print(S.shape)
         
         z = S.detach() - s
         
         z = z.view(z.size(0), -1)
         
-        v2 = self.critic(z)
+        v2 = self.critic2(z)
         
-        Q_22 = self.actor(z)
+        Q_22 = self.actor2(z)
         
 #         pi = F.softmax(Q_22)
         V_wave = v2 #(pi*Q_22).sum()
         
         a_22 = T.sign(Q_22-V_wave.detach())
         
-        Q_21 = self.actor_base(a_22.view(a_22.size(0), -1))
+        Q_21 = self.actor_base2(a_22.view(a_22.size(0), -1))
         
         return kl, decoded, v2, Q_21, a_22, Q_22, hx,cx,s,S, V_wave
