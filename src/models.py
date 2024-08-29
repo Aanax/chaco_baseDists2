@@ -265,7 +265,7 @@ class Level2(nn.Module):
         
 #         print(prev_action.shape)
 #         prev_action = prev_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,8,5,5)).detach()
-        hx, cx = self.ConvLSTM_mu2(s.detach(), (hx2,cx2), prev_action.detach()) #(states[0][0][0],states[0][1][0]))
+        hx, cx = self.ConvLSTM_mu2(s.detach(), (hx2.detach(),cx2.detach()), prev_action.detach()) #(states[0][0][0],states[0][1][0]))
     
         S = self.oracle2(hx)
         

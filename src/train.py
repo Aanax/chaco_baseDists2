@@ -201,11 +201,21 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             losses[2] = loss_Q_11
             losses[4] = loss_Q_21
             losses[7] = loss_Q_22
-            loss1 = (args["Training"]["w_policy"]*loss_Q_11)#+args["Training"]["w_value"]*value_loss1)
-            loss2 = (args["Training"]["w_policy"]*loss_Q_21+args["Training"]["w_value"]*value_loss2+args["Training"]["w_policy"]*loss_Q_22)
-
-            loss1 += args["Training"]["w_kld"]*kld_loss1
-            loss2 += args["Training"]["w_kld"]*kld_loss2
+#             loss1 = (args["Training"]["w_policy"]*loss_Q_11)
+            (args["Training"]["w_policy"]*loss_Q_11).backward(retain_graph=True)
+            (args["Training"]["w_policy"]*loss_Q_21).backward(retain_graph=True)
+            (args["Training"]["w_policy"]*loss_Q_22).backward(retain_graph=True)
+            (args["Training"]["w_value"]*value_loss2).backward(retain_graph=True)
+            #+args["Training"]["w_value"]*value_loss1)
+#             loss2 = (args["Training"]["w_policy"]*loss_Q_21+args["Training"]["w_value"]*value_loss2+args["Training"]["w_policy"]*loss_Q_22)
+            (args["Training"]["w_kld"]*kld_loss1).backward(retain_graph=True)
+            (args["Training"]["w_kld"]*kld_loss2).backward(retain_graph=True)
+#             loss1 += args["Training"]["w_kld"]*kld_loss1
+#             loss2 += args["Training"]["w_kld"]*kld_loss2
+            (args["Training"]["w_MPDI"]*S_loss1).backward(retain_graph=True)
+            
+            (args["Training"]["w_MPDI"]*S_loss2).backward(retain_graph=True)
+            
 
 #             loss2 += args["Training"]["w_MPDI"]*S_loss2
 #             loss1 += args["Training"]["w_MPDI"]*S_loss1
@@ -259,15 +269,17 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             loss_restoration2 = args["Training"]["w_restoration"] * restoration_loss2
             loss_restoration1.backward(retain_graph=True)
             loss_restoration2.backward(retain_graph=True)
+#             loss1+=loss_restoration1
+#             loss2+=loss_restoration2
             
-            S_loss1 = args["Training"]["w_MPDI"]*S_loss1
-            S_loss2 = args["Training"]["w_MPDI"]*S_loss2
+#             S_loss1 = args["Training"]["w_MPDI"]*S_loss1
+#             S_loss2 = args["Training"]["w_MPDI"]*S_loss2
         
-            S_loss2.backward(retain_graph=True)
-            S_loss1.backward(retain_graph=True)
+#             S_loss2.backward(retain_graph=True)
+#             S_loss1.backward(retain_graph=True)
 
-            loss1.backward(retain_graph=False)
-            loss2.backward(retain_graph=False)
+#             loss1.backward()#retain_graph=False)
+#             loss2.backward()#retain_graph=False)
 
             ensure_shared_grads(player.model1, shared_model[0], gpu=gpu_id >= 0)
             ensure_shared_grads(player.model2, shared_model[1], gpu=gpu_id >= 0)
@@ -275,7 +287,8 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             player.clear_actions()
             player.model1.zero_grad()
             player.model2.zero_grad()
-
+#             del loss1
+#             del loss2
 
     
 # def MPDI_loss_calc1(player, V_last1, S_last1, tau, gamma1, adaptive, i):
@@ -293,7 +306,7 @@ def MPDI_loss_calc2(player, V_last2, S_last2, tau, gamma2, adaptive, i):
         return S_last2, 0.5 * S_advantage2.pow(2).sum()
     except Exception as e:
 #         print(e, flush=True)
-        return S_last2, 0
+        return S_last2, (S_last2-player.Ss2[0]).sum()*0
     
 
 def _kld_loss_calc(player, i):
@@ -365,7 +378,7 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, S_last2, tau, gamma1, ga
         S_last2, part_S_loss2 = MPDI_loss_calc2(player, V_last2, S_last2, tau, gamma2, None, i)
         S_loss2 += part_S_loss2
         
-        S_loss1 += 0.5*((player.Ss1[i]-player.ss1[i+1])**2).sum()
+        S_loss1 += 0.5*((player.Ss1[i]-player.ss1[i+1].detach())**2).sum()
         
 #         delta_t1 = player.rewards1[i] + gamma1 * \
 #             player.values1[i + 1].data - player.values1[i].data
