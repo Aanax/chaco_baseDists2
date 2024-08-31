@@ -393,7 +393,7 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, S_last2, tau, gamma1, ga
             player.values2[i + 1].data - player.values2[i].data
         
         D2 = D2*gamma2 + delta_t2
-        v2_corr = player.values2[i]+D2
+        v2_corr = player.values2[i].detach()+D2
                 
         #KL loss
         kld_delta1, kld_delta2 = kld_loss_calc(player, i)
