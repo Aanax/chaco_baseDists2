@@ -41,12 +41,12 @@ class Oracle(nn.Module):
     def __init__(self, args, device):#1024
         super(Oracle, self).__init__()
         
-        self.conv = nn.Conv2d(38, 32, 5, stride=1, padding=2)
+        self.conv = nn.Conv2d(70, 32, 5, stride=1, padding=2)
 
-    def forward(self,x, previous_action):
+    def forward(self,x, previous_action, previous_state):
         
         previous_action = previous_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,20,20)).detach()
-        x = torch.cat([x,previous_action], dim=1)        
+        x = torch.cat([x,previous_action, previous_state], dim=1)        
         x = self.conv(x)
         
         return x 
@@ -130,14 +130,14 @@ class Level1(nn.Module):
         self.train()
         self.z_EMA_t = 0
 
-    def forward(self,x, previous_action):
+    def forward(self,x, previous_action, previous_state):
 #          = x
         
         s, kl = self.encoder(x)
        
         decoded = self.decoder(s)
                 
-        S = self.oracle(s.detach(), previous_action.detach())
+        S = self.oracle(s.detach(), previous_action.detach(), previous_state.detach())
         
         z = s.view(s.size(0), -1)
 #         v = self.critic(z)

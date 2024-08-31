@@ -52,6 +52,8 @@ class Agent(object):
         self.prev_action_logits = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
         self.prev_action_sampled = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
         self.prev_action2_logits = torch.zeros((1,8)).to("cuda:"+str(gpu_id))
+        
+        self.prev_state = torch.zeros((1,32,20,20)).to("cuda:"+str(gpu_id))
 
 
         self.train_episodes_run_2 =0
@@ -121,7 +123,7 @@ class Agent(object):
         with torch.autograd.set_detect_anomaly(True):
             #kl,decoded,v,a, s
             kld1, x_restored1, v1, Q_11, s1, S1 = self.model1(Variable(
-                self.state.unsqueeze(0)), self.prev_action)
+                self.state.unsqueeze(0)), self.prev_action, self.prev_state)
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
             kld2, x_restored2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, V_wave = self.model2(s1.detach(), self.hx2.detach(), self.cx2.detach(), self.a_22_prev.detach())
@@ -137,6 +139,8 @@ class Agent(object):
             self.prev_action = torch.zeros((1,6)).to(Q_11.device)
             self.prev_action[0][action1.item()] = 1
             self.prev_action = self.prev_action.to(Q_11.device)
+            
+            self.prev_state = s1
            
             
             self.train_episodes_run+=1
@@ -245,13 +249,14 @@ class Agent(object):
                 self.cx2 = self.cx2.data
                 
             kld1, x_restored1, v1, Q_11, s1, S1 = self.model1(Variable(
-                self.state.unsqueeze(0)), self.prev_action)
+                self.state.unsqueeze(0)), self.prev_action, self.prev_state)
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
             kld2, x_restored2,  v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, V_wave = self.model2(s1.detach(), self.hx2, self.cx2, self.a_22_prev)
             
 #             self.Q_21_prev = Q_21
             self.a_22_prev = a_22
+            self.prev_state = s1
 
     
             action_probs = F.softmax(Q_11+Q_21)
