@@ -284,6 +284,6 @@ class Level2(nn.Module):
         
         a_22 = ((Q_22-V_wave.detach())>=0).float()
         
-        Q_21 = self.actor_base2(a_22.view(a_22.size(0), -1).detach())*0
+        Q_21 = self.actor_base2(a_22.view(a_22.size(0), -1).detach())
         
         return kl, decoded, v2, Q_21, a_22, Q_22, hx,cx,s,S, V_wave
