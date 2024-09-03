@@ -257,6 +257,7 @@ class Agent(object):
 #             self.Q_21_prev = Q_21
             self.a_22_prev = a_22
             self.prev_state = s1
+            
 
     
             action_probs = F.softmax(Q_11+Q_21)
@@ -278,12 +279,17 @@ class Agent(object):
         self.S2_prev = S2.detach()
 #         self.a1_prev = a1.detach()
 #         self.a2_prev = a2.detach()
-        
+        self.last_Q11 = Q_11
+        self.last_Q21 = Q_21
+        self.last_Q22 = Q_22
+        self.last_S1 = S1
         self.last_S2 = S2
-        self.last_v = v1
+        self.last_v1 = v1
         self.last_v2 = v2
-        self.last_s = s1
+        self.last_s1 = s1
         self.last_s2 = s2
+        self.last_a22 = a_22
+        self.last_a = action1
         
         if self.gpu_id >= 0:
             with torch.cuda.device(self.gpu_id):
