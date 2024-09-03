@@ -63,8 +63,9 @@ class Encoder(nn.Module):
         self.conv11 = nn.Conv2d(16, 32, 5, stride=1, padding=2)
         self.maxp11 = nn.MaxPool2d(2, 2)
         
-        self.conv11_logvar = nn.Conv2d(16, 32, 5, stride=1, padding=2)
-        self.maxp11_logvar = nn.MaxPool2d(2, 2)
+#         self.conv11_logvar = nn.Conv2d(16, 32, 5, stride=1, padding=2)
+#         self.maxp11_logvar = nn.MaxPool2d(2, 2)
+        self.layernorm = nn.LayerNorm([32,20,20])   
         
              
         self.conv1.apply(init_first)
@@ -88,13 +89,14 @@ class Encoder(nn.Module):
 #         x = T.cat((x.view(x.size(0), -1), previous_action),1)
         
         mu = self.maxp11(self.conv11(x))
-        logvar = self.maxp11_logvar(self.conv11_logvar(x))
+#         logvar = self.maxp11_logvar(self.conv11_logvar(x))
 
-        z_t = self.N.sample(mu.shape)
-        s = mu + T.exp(logvar / 2) * z_t #self.z_EMA_t
+#         z_t = self.N.sample(mu.shape)
+#         s = mu + T.exp(logvar / 2) * z_t #self.z_EMA_t
         
-        kl = -0.5*(1 + logvar - mu**2 - T.exp(logvar)).sum() # + mu.detach()**2
+        kl = 0 #-0.5*(1 + logvar - mu**2 - T.exp(logvar)).sum() # + mu.detach()**2
         
+        s = self.layernorm(mu)
 
         
         return s, kl
