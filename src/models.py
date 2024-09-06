@@ -70,7 +70,7 @@ class Encoder(nn.Module):
              
         self.conv1.apply(init_first)
         self.conv11.apply(init_base)
-        self.conv11_logvar.apply(init_base)
+#         self.conv11_logvar.apply(init_base)
         
         self.N = torch.distributions.Normal(0, 1)
         self.N.loc = self.N.loc.to(device) # hack to get sampling on the GPU
@@ -94,7 +94,7 @@ class Encoder(nn.Module):
 #         z_t = self.N.sample(mu.shape)
 #         s = mu + T.exp(logvar / 2) * z_t #self.z_EMA_t
         
-        kl = 0 #-0.5*(1 + logvar - mu**2 - T.exp(logvar)).sum() # + mu.detach()**2
+        kl = mu.sum()*0 #-0.5*(1 + logvar - mu**2 - T.exp(logvar)).sum() # + mu.detach()**2
         
         s = self.layernorm(mu)
 
@@ -183,7 +183,7 @@ class Encoder2(nn.Module):
         
         self.gamma1 = float(args["Training"]["initial_gamma1"])
         self.gamma2 = float(args["Training"]["initial_gamma2"])
-#         self.Layernorm = nn.LayerNorm([38,20,20])        
+        self.Layernorm = nn.LayerNorm([64,5,5])        
 #         #20 - 10 - 5
         self.conv1 = nn.Conv2d(32, 64, 5, stride=1, padding=2)
         self.maxp1 = nn.MaxPool2d(2, 2)
@@ -210,12 +210,14 @@ class Encoder2(nn.Module):
 #         x = self.Layernorm(x)
         x = F.relu(self.maxp1(self.conv1(x)))
         mu = self.maxp2(self.conv2(x))
-        logvar = self.maxp2_logvar(self.conv2_logvar(x))
+#         logvar = self.maxp2_logvar(self.conv2_logvar(x))
         
-        z_t = self.N.sample(mu.shape)
-        s = mu + T.exp(logvar / 2) * z_t #self.z_EMA_t
+#         z_t = self.N.sample(mu.shape)
+#         s = mu + T.exp(logvar / 2) * z_t #self.z_EMA_t
         
-        kl = -0.5*(1 + logvar - mu**2 - T.exp(logvar)).mean()
+        kl = mu.sum()*0 #-0.5*(1 + logvar - mu**2 - T.exp(logvar)).mean()
+        
+        s = self.layernorm(mu)
         
         return s, kl
     
@@ -286,6 +288,6 @@ class Level2(nn.Module):
         
         a_22 = ((Q_22-V_wave.detach())>=0).float()
         
-        Q_21 = self.actor_base2(a_22.view(a_22.size(0), -1).detach())*0
+        Q_21 = self.actor_base2(a_22.view(a_22.size(0), -1).detach())
         
         return kl, decoded, v2, Q_21, a_22, Q_22, hx,cx,s,S, V_wave
