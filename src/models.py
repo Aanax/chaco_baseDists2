@@ -183,7 +183,7 @@ class Encoder2(nn.Module):
         
         self.gamma1 = float(args["Training"]["initial_gamma1"])
         self.gamma2 = float(args["Training"]["initial_gamma2"])
-        self.Layernorm = nn.LayerNorm([64,5,5])        
+        self.layernorm = nn.LayerNorm([64,5,5])        
 #         #20 - 10 - 5
         self.conv1 = nn.Conv2d(32, 64, 5, stride=1, padding=2)
         self.maxp1 = nn.MaxPool2d(2, 2)
@@ -191,12 +191,12 @@ class Encoder2(nn.Module):
         self.conv2 = nn.Conv2d(64, 64, 5, stride=1, padding=2)
         self.maxp2 = nn.MaxPool2d(2, 2)
         
-        self.conv2_logvar = nn.Conv2d(64, 64, 5, stride=1, padding=2)
-        self.maxp2_logvar = nn.MaxPool2d(2, 2)
+#         self.conv2_logvar = nn.Conv2d(64, 64, 5, stride=1, padding=2)
+#         self.maxp2_logvar = nn.MaxPool2d(2, 2)
         
         self.conv1.apply(init_first)
         self.conv2.apply(init_base)
-        self.conv2_logvar.apply(init_base)
+#         self.conv2_logvar.apply(init_base)
         
         self.N = torch.distributions.Normal(0, 1)
         self.N.loc = self.N.loc.to(device) # hack to get sampling on the GPU
