@@ -168,21 +168,23 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
         
         if not player.done:
             state = player.state
-            kld1, x_restored1, v1, Q_11, s1, g1 = player.model1(Variable(
-            state.unsqueeze(0)), player.prev_action, player.prev_state)
+            x_restored1, v1, Q_11, s1, g1 = player.model1(Variable(
+                state.unsqueeze(0)), player.prev_action_1, player.prev_g1, player.memory_1)
             
-            kld2, x_restored2, v2, Q_21, a_22, Q_22, player.hx2, player.cx2, s2, g2, V_wave = player.model2(s1.detach(), player.hx2, player.cx2, player.a_22_prev)
+            #kl, v, a_21, a_22, Q_22, hx,cx,s,S
+            x_restored2, v2, Q_21, a_22, Q_22, s2,g2, V_wave = player.model2(g1.detach(), player.prev_action_2, player.prev_g2, player.memory_2)
             player.train_episodes_run+=1
-            V_last1 = 0 #v1.detach()
+            V_last1 = v1.detach()
             V_last2 = v2.detach()
             s_last1 = s1#g1.detach()
             g_last2 = g2.detach()
+            g_last1 = g1.detach()
             
             
         with torch.autograd.set_detect_anomaly(True):
             adaptive = False
 
-            losses = train_func(player, V_last1, V_last2, s_last1, g_last2, tau, gamma1, gamma2, w_curiosity, kld_loss_calc)
+            losses = train_func(player, V_last1, V_last2, s_last1, g_last1, g_last2, tau, gamma1, gamma2, w_curiosity, kld_loss_calc)
 
 #             kld_loss1, policy_loss1, value_loss1, MPDI_loss1, kld_loss2, policy_loss2, value_loss2, MPDI_loss2, policy_loss_base, kld_loss_actor2, loss_restoration1,loss_restoration2, ce_loss1, ce_loss_base = losses
             
@@ -291,7 +293,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             del loss2
 
     
-def MPDI_loss_calc2(player, V_last2, g_last1, tau, gamma1, adaptive, i):
+def MPDI_loss_calc1(player, V_last1, g_last1, tau, gamma1, adaptive, i):
     #Discounted Features rewards (s - after encoding S-after lstm)
     try:
         g_last1 = g_last1*gamma1 + (1-gamma1)*player.ss1[i+1].detach()
@@ -299,7 +301,7 @@ def MPDI_loss_calc2(player, V_last2, g_last1, tau, gamma1, adaptive, i):
         return g_last1, 0.5 * g_advantage1.pow(2).sum()
     except Exception as e:
 #         print(e, flush=True)
-        return g_last1, (g_last1-player.gs2[0]).sum()*0
+        return g_last1, (g_last1-player.gs1[0]).sum()*0
 
 def MPDI_loss_calc2(player, V_last2, g_last2, tau, gamma2, adaptive, i):
     #Discounted Features rewards (s - after encoding S-after lstm)
@@ -349,6 +351,7 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, g_last1, g_last2, tau, g
     policy_loss2 = 0
     policy_loss_base = 0
     value_loss2 = 0
+    v2_reward = 0
 #     gae2 = torch.zeros(1, 1)
 #     if player.gpu_id >= 0:
 #         with torch.cuda.device(player.gpu_id):
@@ -383,7 +386,7 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, g_last1, g_last2, tau, g
         
 #         g_loss1 += 0.5*((player.gs1[i]-player.ss1[i+1].detach())**2).sum()
 
-        g_last1, part_g_loss2 = MPDI_loss_calc2(player, V_last1, g_last2, tau, gamma1, None, i)
+        g_last1, part_g_loss2 = MPDI_loss_calc1(player, V_last1, g_last1, tau, gamma1, None, i)
         g_loss1 += part_g_loss2
         
         delta_t1 = player.rewards1[i] + gamma1 * \
@@ -400,13 +403,13 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, g_last1, g_last2, tau, g
         
         D2 = D2*gamma2 + delta_t2
         
-        v1_corr = = player.values1[i].detach()+D1
+        v1_corr = player.values1[i].detach()+D1
         v2_corr = player.values2[i].detach()+D2
                 
-        #KL loss
-        kld_delta1, kld_delta2 = kld_loss_calc(player, i)
-        kld_loss1+=kld_delta1 #*(abs(D1) + abs(D2))
-        kld_loss2+=kld_delta2 #*abs(D2)
+#         #KL loss
+#         kld_delta1, kld_delta2 = kld_loss_calc(player, i)
+#         kld_loss1+=kld_delta1 #*(abs(D1) + abs(D2))
+#         kld_loss2+=kld_delta2 #*abs(D2)
         
         restoration_loss1_part = (player.restoreds1[i] - player.restore_labels1[i]).pow(2).sum()
         restoration_loss1 += restoration_loss1_part #*(abs(D1) + abs(D2))

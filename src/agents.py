@@ -41,8 +41,8 @@ class Agent(object):
         self.cx2 = None #cell_states2 = [None]
         
 #         self.states = []
-        self.S1_prev = torch.zeros((1,args["Model"]["S1_dim"])).to("cuda:"+str(gpu_id))
-        self.S2_prev = torch.zeros((1,args["Model"]["S2_dim"])).to("cuda:"+str(gpu_id))
+#         self.g1_prev = torch.zeros((1,args["Model"]["g1_dim"])).to("cuda:"+str(gpu_id))
+#         self.g2_prev = torch.zeros((1,args["Model"]["g2_dim"])).to("cuda:"+str(gpu_id))
         
         self.prev_action_1 = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
         self.prev_action_2 = torch.zeros((1,8)).to("cuda:"+str(gpu_id))
@@ -50,8 +50,8 @@ class Agent(object):
         self.prev_g1 = torch.zeros((1,32,20,20)).to("cuda:"+str(gpu_id))
         self.prev_g2 = torch.zeros((1,64,5,5)).to("cuda:"+str(gpu_id))
         
-        self.memory_1 = 0
-        self.memory_2 = 0
+        self.memory_1 = torch.zeros((1,32,20,20)).to("cuda:"+str(gpu_id))
+        self.memory_2 = torch.zeros((1,64,5,5)).to("cuda:"+str(gpu_id))
 
         self.train_episodes_run_2 =0
         self.train_episodes_run =0
@@ -68,7 +68,7 @@ class Agent(object):
         self.w_restoration = self.args["Training"]["w_restoration"]
         self.w_restoration_future = self.args["Training"]["w_restoration_future"]
         
-        self.S1_runningmean = 0
+        self.g1_runningmean = 0
 #         self.V1_runningmean = 0
 #         self.D1 = 0
         self.VD_runningmean = 0
@@ -120,10 +120,10 @@ class Agent(object):
         with torch.autograd.set_detect_anomaly(True):
             #decoded,v,Q11, s, g
             x_restored1, v1, Q_11, s1, g1 = self.model1(Variable(
-                self.state.unsqueeze(0)), self.prev_action, self.prev_g1, self.memory)
+                self.state.unsqueeze(0)), self.prev_action_1, self.prev_g1, self.memory_1)
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
-            kld2, x_restored2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, V_wave = self.model2(s1.detach(), self.hx2.detach(), self.cx2.detach(), self.a_22_prev.detach())
+            x_restored2, v2, Q_21, a_22, Q_22, s2,g2, V_wave = self.model2(g1.detach(), self.prev_action_2, self.prev_g2, self.memory_2)
             
 #             self.Q_21_prev = Q_21
             self.a_22_prev = a_22.to(Q_22.device)
@@ -140,8 +140,8 @@ class Agent(object):
             self.prev_action_1 = Q_11.detach()
             self.prev_action_2 = Q_22.detach()
             
-            self.memory_1 = self.memory_1*gamma1 + s1.detach()
-            self.memory_2 = self.memory_2*gamma1 + s2.detach()
+            self.memory_1 = self.memory_1*self.gamma1 + s1.detach()
+            self.memory_2 = self.memory_2*self.gamma2 + s2.detach()
             
             
             self.prev_g1 = g1.detach()
@@ -171,7 +171,6 @@ class Agent(object):
         
 #         self.alphas1.append(alpha1)
 #         self.alphas2.append(alpha2)
-        self.S2_prev = torch.clone(S2.detach())
         
         
         
@@ -179,25 +178,23 @@ class Agent(object):
         
         
         self.rewards1.append(self.reward)
-        self.klds1.append(kld1)
         self.ss1.append(s1)
-        self.gs1.append(S1)
+        self.gs1.append(g1)
         
-#         self.gs1_runningmean.append(torch.clone(self.S1_runningmean).detach())
+#         self.gs1_runningmean.append(torch.clone(self.g1_runningmean).detach())
 #         self.values1_runningmean.append(torch.clone(self.V1_runningmean).detach())
         
 #         self.entropies2.append(entropy2)
         self.values2.append(v2)
 #         self.log_probs2.append(log_prob2)
-        self.klds2.append(kld2)
 #         self.klds_actor2.append(kl_actor2)
 #         self.a_klds2.append(a_kld2)
         self.ss2.append(s2)
-        self.gs2.append(S2)
+        self.gs2.append(g2)
         
         
         self.states1.append(self.state)
-#         self.states2.append(S1)
+#         self.states2.append(g1)
 
         return self
 
@@ -253,11 +250,11 @@ class Agent(object):
                 self.hx2 = self.hx2.data
                 self.cx2 = self.cx2.data
                 
-            kld1, x_restored1, v1, Q_11, s1, S1 = self.model1(Variable(
-                self.state.unsqueeze(0)), self.prev_action, self.prev_state)
+            x_restored1, v1, Q_11, s1, g1 = self.model1(Variable(
+                self.state.unsqueeze(0)), self.prev_action_1, self.prev_g1, self.memory_1)
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
-            kld2, x_restored2,  v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, V_wave = self.model2(s1.detach(), self.hx2, self.cx2, self.a_22_prev)
+            x_restored2, v2, Q_21, a_22, Q_22, s2,g2, V_wave = self.model2(g1.detach(), self.prev_action_2, self.prev_g2, self.memory_2)
             
 #             self.Q_21_prev = Q_21
             self.a_22_prev = a_22
@@ -267,24 +264,30 @@ class Agent(object):
             action_probs = F.softmax(Q_11+Q_21)
             action1 = action_probs.multinomial(1).data #?
             
-            self.prev_action = torch.zeros((1,6))
-            self.prev_action[0][action1.item()] = 1
-            self.prev_action = self.prev_action.to(Q_11.device)
+            self.prev_action_1 = Q_11.detach()
+            self.prev_action_2 = Q_22.detach()
+            
+            self.memory_1 = self.memory_1*self.gamma1 + s1.detach()
+            self.memory_2 = self.memory_2*self.gamma2 + s2.detach()
+            
+            
+            self.prev_g1 = g1.detach()
+            self.prev_g2 = g2.detach()
         
         state, self.reward, self.done, self.info = self.env.step(action1.cpu().numpy())
         self.state = torch.from_numpy(state).float()
         self.original_state = state
-#         self.original_state2 = S1
+#         self.original_state2 = g1
         self.restored_state = x_restored1
 #         self.restored_state2 = x_restored2
         
 #         self.restored_after_lstm = self.model.Decoder2(S)
-#         self.S1_prev = S1.detach()
-        self.S2_prev = S2.detach()
+#         self.g1_prev = g1.detach()
+        self.g2_prev = g2.detach()
 #         self.a1_prev = a1.detach()
 #         self.a2_prev = a2.detach()
         
-        self.last_S2 = S2
+        self.last_g2 = g2
         self.last_v = v1
         self.last_v2 = v2
         self.last_s = s1

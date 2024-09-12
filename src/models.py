@@ -98,7 +98,7 @@ class Encoder(nn.Module):
         s = self.layernorm(mu)
 
         
-        return s, kl
+        return s
     
     
 class Level1(nn.Module):
@@ -124,14 +124,14 @@ class Level1(nn.Module):
         self.actor.weight.data, args["Model"]["a_init_std"])
         self.actor.bias.data.fill_(0)
         
-#         self.critic.weight.data = norm_col_init(
-#         self.critic.weight.data, args["Model"]["v_init_std"])
-#         self.critic.bias.data.fill_(0) 
+        self.critic.weight.data = norm_col_init(
+        self.critic.weight.data, args["Model"]["v_init_std"])
+        self.critic.bias.data.fill_(0) 
 
         self.train()
         self.z_EMA_t = 0
 
-    def forward(self,x, previous_action, previous_g, memory):
+    def forward(self, x, previous_action, previous_g, memory):
 #          = x
         
         s = self.encoder(x)
@@ -141,9 +141,11 @@ class Level1(nn.Module):
         g = self.oracle(s.detach(), previous_action.detach(), previous_g.detach(), memory.detach())
                         
         z = torch.cat([g.detach(),s], dim=1)
+        z = z.view(z.size(0), -1)
+        
         v = self.critic(z)
-        actor_in = z.view(z.size(0), -1)
-        Q11 = self.actor(actor_in)
+        
+        Q11 = self.actor(z)
         
 #         print("DECODEd shape ", decoded.shape, flush=True)
         return decoded,v,Q11, s, g #, hx, cx, s,S  
@@ -188,10 +190,10 @@ class Encoder2(nn.Module):
         self.gamma2 = float(args["Training"]["initial_gamma2"])
         self.layernorm = nn.LayerNorm([64,5,5])        
 #         #20 - 10 - 5
-        self.conv1 = nn.Conv2d(32, 64, 5, stride=1, padding=2)
+        self.conv1 = nn.Conv2d(32, 48, 5, stride=1, padding=2)
         self.maxp1 = nn.MaxPool2d(2, 2)
         
-        self.conv2 = nn.Conv2d(64, 64, 5, stride=1, padding=2)
+        self.conv2 = nn.Conv2d(48, 64, 5, stride=1, padding=2)
         self.maxp2 = nn.MaxPool2d(2, 2)
         
 #         self.conv2_logvar = nn.Conv2d(64, 64, 5, stride=1, padding=2)
@@ -224,26 +226,18 @@ class Level2(nn.Module):
         self.encoder2 = Encoder2(args, device)
         self.oracle2 = Oracle2({},device)
         self.decoder2 = Decoder2({}, device)
-        self.actor2 = nn.Linear(64*5*5, 8) #Actor2(args,device)
+        self.actor2 = nn.Linear(64*5*5*2, 8) #Actor2(args,device)
         self.actor_base2 = nn.Linear(8, 6)
-        self.critic2 = nn.Linear(64*5*5, 1)
-        #32x40x40
-        self.ConvLSTM_mu2 = ConvLSTMwithAbaseCell(input_dim=64, #withAbase
-                                 hidden_dim=64,
-                                 kernel_size=(5, 5),
-                                 num_actions=8,
-                                 bias=True,
-                                       )
+        self.critic2 = nn.Linear(64*5*5*2, 1)
         for m in self.children():
             if not hasattr(m,"name"):
                 m.name = None
         self.decoder2.apply(init_decoder) #CHECK IF WORKS
-        self.ConvLSTM_mu2.apply(init_base)            
         self.actor2.weight.data = norm_col_init(
-        self.actor2.weight.data, 0.1)#args["Model"]["a_init_std"])
+        self.actor2.weight.data, args["Model"]["a_init_std"])
         self.actor2.bias.data.fill_(0)
         self.actor_base2.weight.data = norm_col_init(
-        self.actor_base2.weight.data, 0.2)#args["Model"]["a_init_std"])
+        self.actor_base2.weight.data, args["Model"]["a_init_std"])
         self.actor_base2.bias.data.fill_(0)
         
         self.critic2.weight.data = norm_col_init(
@@ -266,7 +260,7 @@ class Level2(nn.Module):
 #         prev_action = prev_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,8,5,5)).detach()
 #         hx, cx = self.ConvLSTM_mu2(s.detach(), (hx2.detach(),cx2.detach()), prev_action.detach()) #(states[0][0][0],states[0][1][0]))
     
-        g = self.oracle2(previous_action, previous_g, memory)
+        g = self.oracle2(s, previous_action, previous_g, memory)
         
 #         print(S.shape)
         
@@ -284,10 +278,10 @@ class Level2(nn.Module):
         
 #         a_22 =  #((Q_22-V_wave.detach())>=0).float()
         
-        smax = F.softmax(Q_22)
+        smax = F.softmax(Q_22, dim=1)
         a_22 = T.zeros_like(smax)
-        argmax = T.argmax(smax)
-        a_22[argmax] = (Q_22*smax)[argmax]
+        argmax = T.argmax(smax[0])
+        a_22[0][argmax] = (Q_22*smax)[0][argmax]
         
         Q_21 = self.actor_base2(a_22.view(a_22.size(0), -1).detach())
         
