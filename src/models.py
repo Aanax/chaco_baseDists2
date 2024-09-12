@@ -40,14 +40,20 @@ class Decoder(nn.Module):
 class Oracle(nn.Module):
     def __init__(self, args, device):#1024
         super(Oracle, self).__init__()
-        
-        self.conv = nn.Conv2d(70, 32, 5, stride=1, padding=2)
+        # 102
+        self.conv = nn.Conv2d(32+6+32+32, 64, 5, stride=1, padding=2)
+        self.conv2 = nn.Conv2d(64, 32, 5, stride=1, padding=2)
 
-    def forward(self,x, previous_action, previous_state):
+    def forward(self, x, previous_action, previous_g, memory):
         
         previous_action = previous_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,20,20)).detach()
-        x = torch.cat([x,previous_action, previous_state], dim=1)        
-        x = self.conv(x)
+        #prev_g 1,32,20,20
+        #memory 1,32,20,20
+
+        x = torch.cat([x, previous_action, previous_g, memory], dim=1)
+        
+        x = F.relu(self.conv(x))
+        x = self.conv2(x)
         
         return x 
 
@@ -72,11 +78,6 @@ class Encoder(nn.Module):
         self.conv11.apply(init_base)
 #         self.conv11_logvar.apply(init_base)
         
-        self.N = torch.distributions.Normal(0, 1)
-        self.N.loc = self.N.loc.to(device) # hack to get sampling on the GPU
-        self.N.scale = self.N.scale.to(device)
-        self.kl = 0
-        
         for m in self.children():
             if not hasattr(m,"name"):
                 m.name = None
@@ -93,9 +94,7 @@ class Encoder(nn.Module):
 
 #         z_t = self.N.sample(mu.shape)
 #         s = mu + T.exp(logvar / 2) * z_t #self.z_EMA_t
-        
-        kl = mu.sum()*0 #-0.5*(1 + logvar - mu**2 - T.exp(logvar)).sum() # + mu.detach()**2
-        
+                
         s = self.layernorm(mu)
 
         
@@ -111,8 +110,8 @@ class Level1(nn.Module):
         self.decoder = Decoder({}, device)
         self.oracle = Oracle({}, device)
         self.encoder = Encoder(args, device)
-        self.actor = nn.Linear(12800, 6)
-#         self.critic = nn.Linear(12800, 1)
+        self.actor = nn.Linear(12800*2, 6)
+        self.critic = nn.Linear(12800*2, 1)
        
         for m in self.children():
             if not hasattr(m,"name"):
@@ -132,28 +131,22 @@ class Level1(nn.Module):
         self.train()
         self.z_EMA_t = 0
 
-    def forward(self,x, previous_action, previous_state):
+    def forward(self,x, previous_action, previous_g, memory):
 #          = x
         
-        s, kl = self.encoder(x)
+        s = self.encoder(x)
        
         decoded = self.decoder(s)
                 
-        S = self.oracle(s.detach(), previous_action.detach(), previous_state.detach())
-        
-        z = s.view(s.size(0), -1)
-#         v = self.critic(z)
-        v=None
-        
-        z = S.detach()-s
+        g = self.oracle(s.detach(), previous_action.detach(), previous_g.detach(), memory.detach())
+                        
+        z = torch.cat([g.detach(),s], dim=1)
+        v = self.critic(z)
         actor_in = z.view(z.size(0), -1)
         Q11 = self.actor(actor_in)
         
-#         hx, cx = self.ConvLSTM_mu(s, (hx1,cx1), prev_action_logits, prev_action1_logits)
-#         S = self.oracle(hx)
-        
 #         print("DECODEd shape ", decoded.shape, flush=True)
-        return kl,decoded,v,Q11, s, S #, hx, cx, s,S  
+        return decoded,v,Q11, s, g #, hx, cx, s,S  
 
 class Decoder2(nn.Module):
     def __init__(self, args, device):#1024
@@ -171,10 +164,20 @@ class Oracle2(nn.Module):
     def __init__(self, args, device):#1024
         super(Oracle2, self).__init__()
         
-        self.conv = nn.Conv2d(64, 64, 5, stride=1, padding=2)
+        self.conv = nn.Conv2d(64+64+8+64, 128, 5, stride=1, padding=2)
+        self.conv2 = nn.Conv2d(128, 64, 5, stride=1, padding=2)
 
-    def forward(self,x):
-        x = self.conv(x)
+    def forward(self,x, previous_action, previous_g, memory):
+        
+        previous_action = previous_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,8,5,5)).detach()
+        #prev_g 1,32,5,5
+        #memory 1,32,5,5
+
+        x = torch.cat([x, previous_action, previous_g, memory], dim=1)
+        
+        x = F.relu(self.conv(x))
+        x = self.conv2(x)
+        
         return x
     
 class Encoder2(nn.Module):
@@ -198,12 +201,6 @@ class Encoder2(nn.Module):
         self.conv2.apply(init_base)
 #         self.conv2_logvar.apply(init_base)
         
-        self.N = torch.distributions.Normal(0, 1)
-        self.N.loc = self.N.loc.to(device) # hack to get sampling on the GPU
-        self.N.scale = self.N.scale.to(device)
-        self.kl = 0
-        
-        
         
     def forward(self, x):
         
@@ -214,12 +211,10 @@ class Encoder2(nn.Module):
         
 #         z_t = self.N.sample(mu.shape)
 #         s = mu + T.exp(logvar / 2) * z_t #self.z_EMA_t
-        
-        kl = mu.sum()*0 #-0.5*(1 + logvar - mu**2 - T.exp(logvar)).mean()
-        
+                
         s = self.layernorm(mu)
         
-        return s, kl
+        return s
     
     
 class Level2(nn.Module):
@@ -260,22 +255,23 @@ class Level2(nn.Module):
         self.smean_not_set = True
         self.z_EMA_t = 0
         
-    def forward(self, x, hx2, cx2, prev_action): 
+    def forward(self, x, previous_action, previous_g, memory): 
         
 #         x = torch.cat(x, dim=1)
-        s, kl = self.encoder2(x)
+        s = self.encoder2(x)
         
         decoded = self.decoder2(s)
         
 #         print(prev_action.shape)
 #         prev_action = prev_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,8,5,5)).detach()
-        hx, cx = self.ConvLSTM_mu2(s.detach(), (hx2.detach(),cx2.detach()), prev_action.detach()) #(states[0][0][0],states[0][1][0]))
+#         hx, cx = self.ConvLSTM_mu2(s.detach(), (hx2.detach(),cx2.detach()), prev_action.detach()) #(states[0][0][0],states[0][1][0]))
     
-        S = self.oracle2(hx)
+        g = self.oracle2(previous_action, previous_g, memory)
         
 #         print(S.shape)
         
-        z = S.detach() - s
+#         z = S.detach() - s
+        z = torch.cat([g.detach(),s], dim=1)
         
         z = z.view(z.size(0), -1)
         
@@ -286,8 +282,13 @@ class Level2(nn.Module):
 #         pi = F.softmax(Q_22)
         V_wave = v2 #(pi*Q_22).sum()
         
-        a_22 = ((Q_22-V_wave.detach())>=0).float()
+#         a_22 =  #((Q_22-V_wave.detach())>=0).float()
+        
+        smax = F.softmax(Q_22)
+        a_22 = T.zeros_like(smax)
+        argmax = T.argmax(smax)
+        a_22[argmax] = (Q_22*smax)[argmax]
         
         Q_21 = self.actor_base2(a_22.view(a_22.size(0), -1).detach())
         
-        return kl, decoded, v2, Q_21, a_22, Q_22, hx,cx,s,S, V_wave
+        return decoded, v2, Q_21, a_22, Q_22, s,g, V_wave

@@ -44,17 +44,14 @@ class Agent(object):
         self.S1_prev = torch.zeros((1,args["Model"]["S1_dim"])).to("cuda:"+str(gpu_id))
         self.S2_prev = torch.zeros((1,args["Model"]["S2_dim"])).to("cuda:"+str(gpu_id))
         
-        self.a1_prev = torch.zeros((1,env.action_space.n)).to("cuda:"+str(gpu_id))
-        self.prev_action = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
-        self.Q_21_prev = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
-        self.a_22_prev = torch.zeros((1,8)).to("cuda:"+str(gpu_id))
+        self.prev_action_1 = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
+        self.prev_action_2 = torch.zeros((1,8)).to("cuda:"+str(gpu_id))
         
-        self.prev_action_logits = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
-        self.prev_action_sampled = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
-        self.prev_action2_logits = torch.zeros((1,8)).to("cuda:"+str(gpu_id))
+        self.prev_g1 = torch.zeros((1,32,20,20)).to("cuda:"+str(gpu_id))
+        self.prev_g2 = torch.zeros((1,64,5,5)).to("cuda:"+str(gpu_id))
         
-        self.prev_state = torch.zeros((1,32,20,20)).to("cuda:"+str(gpu_id))
-
+        self.memory_1 = 0
+        self.memory_2 = 0
 
         self.train_episodes_run_2 =0
         self.train_episodes_run =0
@@ -121,9 +118,9 @@ class Agent(object):
     def action_train(self):
         
         with torch.autograd.set_detect_anomaly(True):
-            #kl,decoded,v,a, s
-            kld1, x_restored1, v1, Q_11, s1, S1 = self.model1(Variable(
-                self.state.unsqueeze(0)), self.prev_action, self.prev_state)
+            #decoded,v,Q11, s, g
+            x_restored1, v1, Q_11, s1, g1 = self.model1(Variable(
+                self.state.unsqueeze(0)), self.prev_action, self.prev_g1, self.memory)
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
             kld2, x_restored2, v2, Q_21, a_22, Q_22, self.hx2, self.cx2, s2, S2, V_wave = self.model2(s1.detach(), self.hx2.detach(), self.cx2.detach(), self.a_22_prev.detach())
@@ -136,11 +133,19 @@ class Agent(object):
             action1 = action_probs.multinomial(1).data
             self.actions.append(action1)
             
-            self.prev_action = torch.zeros((1,6)).to(Q_11.device)
-            self.prev_action[0][action1.item()] = 1
-            self.prev_action = self.prev_action.to(Q_11.device)
+            #TODO
+#             self.prev_action = torch.zeros((1,6)).to(Q_11.device)
+#             self.prev_action[0][action1.item()] = 1
+#             self.prev_action = self.prev_action.to(Q_11.device)
+            self.prev_action_1 = Q_11.detach()
+            self.prev_action_2 = Q_22.detach()
             
-            self.prev_state = s1
+            self.memory_1 = self.memory_1*gamma1 + s1.detach()
+            self.memory_2 = self.memory_2*gamma1 + s2.detach()
+            
+            
+            self.prev_g1 = g1.detach()
+            self.prev_g2 = g2.detach()
            
             
             self.train_episodes_run+=1
@@ -148,7 +153,7 @@ class Agent(object):
             self.restoreds1.append(x_restored1)
             self.restoreds2.append(x_restored2)
             self.restore_labels1.append(self.state.unsqueeze(0).detach())
-            self.restore_labels2.append(s1.detach())
+            self.restore_labels2.append(g1.detach())
         
         state, self.reward, self.done, self.info = self.env.step(
             action1.cpu().numpy())
@@ -176,9 +181,9 @@ class Agent(object):
         self.rewards1.append(self.reward)
         self.klds1.append(kld1)
         self.ss1.append(s1)
-        self.Ss1.append(S1)
+        self.gs1.append(S1)
         
-#         self.Ss1_runningmean.append(torch.clone(self.S1_runningmean).detach())
+#         self.gs1_runningmean.append(torch.clone(self.S1_runningmean).detach())
 #         self.values1_runningmean.append(torch.clone(self.V1_runningmean).detach())
         
 #         self.entropies2.append(entropy2)
@@ -188,7 +193,7 @@ class Agent(object):
 #         self.klds_actor2.append(kl_actor2)
 #         self.a_klds2.append(a_kld2)
         self.ss2.append(s2)
-        self.Ss2.append(S2)
+        self.gs2.append(S2)
         
         
         self.states1.append(self.state)
@@ -311,10 +316,10 @@ class Agent(object):
         self.probs_throughbase = []
         
         self.values1_runningmean = []
-        self.Ss1_runningmean = []
+        self.gs1_runningmean = []
         
         self.ss1 = []
-        self.Ss1 = []
+        self.gs1 = []
         self.Q_11s = []
         self.Q_21s = []
         self.Q_22s = []
@@ -331,7 +336,7 @@ class Agent(object):
         self.klds_actor2 = []
 #         self.a_klds2 = []
         self.ss2 = []
-        self.Ss2 = []
+        self.gs2 = []
         
         self.restoreds1 = []
         self.restoreds2 = []

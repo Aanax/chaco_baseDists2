@@ -50,8 +50,8 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
         os.mkdir("./"+args["Training"]["log_dir"]+"/stats"+str(main_start_time)+"_"+str(num)+"/")
     except:
         pass
-    STATS_CSV_PATH = "./"+args["Training"]["log_dir"]+"/stats"+str(main_start_time)+"_"+str(num)+"/"+"_STATS"+str(rank)+".csv"
-    f = open(STATS_CSV_PATH, 'w+')
+    STATg_CSV_PATH = "./"+args["Training"]["log_dir"]+"/stats"+str(main_start_time)+"_"+str(num)+"/"+"_STATS"+str(rank)+".csv"
+    f = open(STATg_CSV_PATH, 'w+')
     f.close()
     
     # getting gpu (rank is jusk number of worker)
@@ -104,7 +104,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
     game_num=0
     frame_num = 0
     future_last = 0
-    S_last = torch.Tensor([0])
+    g_last = torch.Tensor([0])
     
 
     kld_loss_calc = _kld_loss_calc
@@ -161,33 +161,33 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
         with torch.cuda.device(gpu_id):
             V_last1 = torch.zeros(1, 1).cuda()
             gae1 = torch.zeros(1, 1).cuda()
-            S_last1 = torch.zeros(1, 1).cuda()
+            g_last1 = torch.zeros(1, 1).cuda()
             V_last1 = torch.zeros(1, 1).cuda()
             gae2 = torch.zeros(1, 1).cuda()
-            S_last2 = torch.zeros(1, 1).cuda()
+            g_last2 = torch.zeros(1, 1).cuda()
         
         if not player.done:
             state = player.state
-            kld1, x_restored1, v1, Q_11, s1, S1 = player.model1(Variable(
+            kld1, x_restored1, v1, Q_11, s1, g1 = player.model1(Variable(
             state.unsqueeze(0)), player.prev_action, player.prev_state)
             
-            kld2, x_restored2, v2, Q_21, a_22, Q_22, player.hx2, player.cx2, s2, S2, V_wave = player.model2(s1.detach(), player.hx2, player.cx2, player.a_22_prev)
+            kld2, x_restored2, v2, Q_21, a_22, Q_22, player.hx2, player.cx2, s2, g2, V_wave = player.model2(s1.detach(), player.hx2, player.cx2, player.a_22_prev)
             player.train_episodes_run+=1
             V_last1 = 0 #v1.detach()
             V_last2 = v2.detach()
-            s_last1 = s1#S1.detach()
-            S_last2 = S2.detach()
+            s_last1 = s1#g1.detach()
+            g_last2 = g2.detach()
             
             
         with torch.autograd.set_detect_anomaly(True):
             adaptive = False
 
-            losses = train_func(player, V_last1, V_last2, s_last1, S_last2, tau, gamma1, gamma2, w_curiosity, kld_loss_calc)
+            losses = train_func(player, V_last1, V_last2, s_last1, g_last2, tau, gamma1, gamma2, w_curiosity, kld_loss_calc)
 
 #             kld_loss1, policy_loss1, value_loss1, MPDI_loss1, kld_loss2, policy_loss2, value_loss2, MPDI_loss2, policy_loss_base, kld_loss_actor2, loss_restoration1,loss_restoration2, ce_loss1, ce_loss_base = losses
             
             #value_loss1,
-            kld_loss1, restoration_loss1, loss_Q_11,  kld_loss2, loss_Q_21, value_loss2, S_loss2, loss_Q_22, S_loss1, restoration_loss2 = losses
+            restoration_loss1, loss_Q_11, loss_Q_21, value_loss1, value_loss2, g_loss2, loss_Q_22, g_loss1, restoration_loss2 = losses
             
             losses = list(losses)
             loss_Q11_non_summed_components = loss_Q_11
@@ -198,27 +198,27 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             loss_Q_21 = loss_Q_21.sum()
             loss_Q_22 = loss_Q_22.sum()
             
-            losses[2] = loss_Q_11
-            losses[4] = loss_Q_21
-            losses[7] = loss_Q_22
+            losses[1] = loss_Q_11
+            losses[2] = loss_Q_21
+            losses[6] = loss_Q_22
 #             loss1 = (args["Training"]["w_policy"]*loss_Q_11)
             (args["Training"]["w_policy"]*loss_Q_11).backward(retain_graph=True)
             (args["Training"]["w_policy"]*loss_Q_21).backward(retain_graph=True)
             (args["Training"]["w_policy"]*loss_Q_22).backward(retain_graph=True)
             (args["Training"]["w_value"]*value_loss2).backward(retain_graph=True)
-            #+args["Training"]["w_value"]*value_loss1)
+            (args["Training"]["w_value"]*value_loss1).backward(retain_graph=True)
 #             loss2 = (args["Training"]["w_policy"]*loss_Q_21+args["Training"]["w_value"]*value_loss2+args["Training"]["w_policy"]*loss_Q_22)
-            (args["Training"]["w_kld"]*kld_loss1).backward(retain_graph=True)
-            (args["Training"]["w_kld"]*kld_loss2).backward(retain_graph=True)
+#             (args["Training"]["w_kld"]*kld_loss1).backward(retain_graph=True)
+#             (args["Training"]["w_kld"]*kld_loss2).backward(retain_graph=True)
 #             loss1 += args["Training"]["w_kld"]*kld_loss1
 #             loss2 += args["Training"]["w_kld"]*kld_loss2
-            (args["Training"]["w_MPDI"]*S_loss1).backward(retain_graph=True)
+            (args["Training"]["w_MPDI"]*g_loss1).backward(retain_graph=True)
             
-            (args["Training"]["w_MPDI"]*S_loss2).backward(retain_graph=True)
+            (args["Training"]["w_MPDI"]*g_loss2).backward(retain_graph=True)
             
 
-#             loss2 += args["Training"]["w_MPDI"]*S_loss2
-#             loss1 += args["Training"]["w_MPDI"]*S_loss1
+#             loss2 += args["Training"]["w_MPDI"]*g_loss2
+#             loss1 += args["Training"]["w_MPDI"]*g_loss1
             
 
             def get_max_with_abs(tensor1d):
@@ -259,7 +259,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
                 else:
                     additional_logs.append(qloss)
             
-            f = open(STATS_CSV_PATH, 'a')
+            f = open(STATg_CSV_PATH, 'a')
             writer = csv.writer(f)
             writer.writerow([mean_Vs_wave, mean_re1, counter.value, local_counter, max_Q11_1, max_Q11_2, max_Q11_3, max_Q21_1, max_Q21_2, max_Q21_3, max_Q22_1, max_Q22_2, max_Q22_3]+additional_logs)
             f.close()
@@ -272,11 +272,11 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             loss1+=loss_restoration1
 #             loss2+=loss_restoration2
             
-#             S_loss1 = args["Training"]["w_MPDI"]*S_loss1
-#             S_loss2 = args["Training"]["w_MPDI"]*S_loss2
+#             g_loss1 = args["Training"]["w_MPDI"]*g_loss1
+#             g_loss2 = args["Training"]["w_MPDI"]*g_loss2
         
-#             S_loss2.backward(retain_graph=True)
-#             S_loss1.backward(retain_graph=True)
+#             g_loss2.backward(retain_graph=True)
+#             g_loss1.backward(retain_graph=True)
 
 #             loss1.backward()#retain_graph=False)
 #             loss2.backward()#retain_graph=False)
@@ -291,22 +291,25 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             del loss2
 
     
-# def MPDI_loss_calc1(player, V_last1, S_last1, tau, gamma1, adaptive, i):
-#     #Discounted Features rewards (s - after encoding S-after lstm)
-
-#     S_last1 = S_last1*gamma1 + (1-gamma1)*player.ss1[i].detach()
-#     S_advantage1 = S_last1-player.Ss1[i]
-#     return S_last1, 0.5 * S_advantage1.pow(2), S_advantage1
-
-def MPDI_loss_calc2(player, V_last2, S_last2, tau, gamma2, adaptive, i):
+def MPDI_loss_calc2(player, V_last2, g_last1, tau, gamma1, adaptive, i):
     #Discounted Features rewards (s - after encoding S-after lstm)
     try:
-        S_last2 = S_last2*gamma2 + (1-gamma2)*player.ss2[i+1].detach()
-        S_advantage2 = S_last2-player.Ss2[i]
-        return S_last2, 0.5 * S_advantage2.pow(2).sum()
+        g_last1 = g_last1*gamma1 + (1-gamma1)*player.ss1[i+1].detach()
+        g_advantage1 = g_last1-player.gs1[i]
+        return g_last1, 0.5 * g_advantage1.pow(2).sum()
     except Exception as e:
 #         print(e, flush=True)
-        return S_last2, (S_last2-player.Ss2[0]).sum()*0
+        return g_last1, (g_last1-player.gs2[0]).sum()*0
+
+def MPDI_loss_calc2(player, V_last2, g_last2, tau, gamma2, adaptive, i):
+    #Discounted Features rewards (s - after encoding S-after lstm)
+    try:
+        g_last2 = g_last2*gamma2 + (1-gamma2)*player.ss2[i+1].detach()
+        g_advantage2 = g_last2-player.gs2[i]
+        return g_last2, 0.5 * g_advantage2.pow(2).sum()
+    except Exception as e:
+#         print(e, flush=True)
+        return g_last2, (g_last2-player.gs2[0]).sum()*0
     
 
 def _kld_loss_calc(player, i):
@@ -330,11 +333,11 @@ def get_pixel_change(pic1, pic2, STEP = 20):
     return res
 
     
-def train_A3C_united(player, V_last1, V_last2, s_last1, S_last2, tau, gamma1, gamma2, w_curiosity, kld_loss_calc):
+def train_A3C_united(player, V_last1, V_last2, s_last1, g_last1, g_last2, tau, gamma1, gamma2, w_curiosity, kld_loss_calc):
     player.values1.append(V_last1) #Variable
-#     player.Ss1.append(S_last1)
+#     player.gs1.append(g_last1)
     player.values2.append(V_last2) #Variable
-    player.Ss2.append(S_last2)
+    player.gs2.append(g_last2)
     policy_loss1 = 0
     value_loss1 = 0
     gae1 = torch.zeros(1, 1)
@@ -342,7 +345,7 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, S_last2, tau, gamma1, ga
         with torch.cuda.device(player.gpu_id):
             gae1 = gae1.cuda()
     kld_loss1 = 0
-    S_loss1 = 0
+    g_loss1 = 0
     policy_loss2 = 0
     policy_loss_base = 0
     value_loss2 = 0
@@ -351,7 +354,7 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, S_last2, tau, gamma1, ga
 #         with torch.cuda.device(player.gpu_id):
 #             gae2 = gae2.cuda()
     kld_loss2 = 0
-    S_loss2 = 0
+    g_loss2 = 0
     loss_Q_21 = 0
     loss_Q_22 = 0
     loss_Q_11 = 0
@@ -375,15 +378,18 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, S_last2, tau, gamma1, ga
     
     for i in reversed(range(len(player.rewards1))):
         #restoration_loss
-        S_last2, part_S_loss2 = MPDI_loss_calc2(player, V_last2, S_last2, tau, gamma2, None, i)
-        S_loss2 += part_S_loss2
+        g_last2, part_g_loss2 = MPDI_loss_calc2(player, V_last2, g_last2, tau, gamma2, None, i)
+        g_loss2 += part_g_loss2
         
-        S_loss1 += 0.5*((player.Ss1[i]-player.ss1[i+1].detach())**2).sum()
+#         g_loss1 += 0.5*((player.gs1[i]-player.ss1[i+1].detach())**2).sum()
+
+        g_last1, part_g_loss2 = MPDI_loss_calc2(player, V_last1, g_last2, tau, gamma1, None, i)
+        g_loss1 += part_g_loss2
         
-#         delta_t1 = player.rewards1[i] + gamma1 * \
-#             player.values1[i + 1].data - player.values1[i].data
+        delta_t1 = player.rewards1[i] + gamma1 * \
+            player.values1[i + 1].data - player.values1[i].data
         
-#         D1 = D1*gamma1 + delta_t1
+        D1 = D1*gamma1 + delta_t1
         
         # Generalized Advantage Estimataion
 #         delta_t2 = (1-gamma1)*(player.values1[i].detach()+D1) + gamma2 * \
@@ -393,6 +399,8 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, S_last2, tau, gamma1, ga
             player.values2[i + 1].data - player.values2[i].data
         
         D2 = D2*gamma2 + delta_t2
+        
+        v1_corr = = player.values1[i].detach()+D1
         v2_corr = player.values2[i].detach()+D2
                 
         #KL loss
@@ -407,7 +415,8 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, S_last2, tau, gamma1, ga
         restoration_loss2 += restoration_loss2_part #*(abs(D1) + abs(D2))
         
         #loss a11
-        target_Q_11 = player.rewards1[i]
+        v2_reward = v2_reward*gamma1 + (1-gamma1)*v2_corr 
+        target_Q_11 = v1_corr + v2_reward
         loss_mask = torch.zeros((1,6))
         loss_mask[0][player.actions[i].item()] = 1
         loss_mask = loss_mask.to(player.Q_11s[i].device)
@@ -430,16 +439,16 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, S_last2, tau, gamma1, ga
         loss_Q_22 +=  0.5 * ((player.Q_22s[i] - v2_corr).pow(2)).sum()*loss_mask_Q22
         
         #value loss
-        V_last2 = gamma2 * V_last1 + (1-gamma1)*player.rewards1[i]
+        V_last2 = gamma2 * V_last2 + (1-gamma1)*v1_corr
         #gamma2 * V_last2 + (1-gamma1)*player.values1[i].detach()
         advantage2 = V_last2 - player.values2[i]
         value_loss2 = value_loss2 + 0.5 * advantage2.pow(2)
         
-#         V_last1 = gamma1 * V_last1 + player.rewards1[i]
-#         advantage1 = V_last1 - player.values1[i]
-#         value_loss1 = value_loss1 + 0.5 * advantage1.pow(2)
+        V_last1 = gamma1 * V_last1 + player.rewards1[i]
+        advantage1 = V_last1 - player.values1[i]
+        value_loss1 = value_loss1 + 0.5 * advantage1.pow(2)
 
 
     #value_loss1*0,
-    return kld_loss1, restoration_loss1, loss_Q_11,  kld_loss2, loss_Q_21, value_loss2, S_loss2, loss_Q_22, S_loss1, restoration_loss2
+    return restoration_loss1, loss_Q_11, loss_Q_21, value_loss1, value_loss2, g_loss2, loss_Q_22, g_loss1, restoration_loss2
 
