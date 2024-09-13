@@ -280,7 +280,7 @@ class Level2(nn.Module):
         
         smax = F.softmax(Q_22, dim=1)
         a_22 = T.zeros_like(smax)
-        argmax = T.argmax(smax[0])
+        argmax = smax[0].multinomial(1).data #T.argmax(smax[0])
         a_22[0][argmax] = (Q_22*smax)[0][argmax]
         
         Q_21 = self.actor_base2(a_22.view(a_22.size(0), -1).detach())

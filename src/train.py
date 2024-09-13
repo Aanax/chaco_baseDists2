@@ -172,7 +172,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
                 state.unsqueeze(0)), player.prev_action_1, player.prev_g1, player.memory_1)
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
-            x_restored2, v2, Q_21, a_22, Q_22, s2,g2, V_wave = player.model2(g1.detach(), player.prev_action_2, player.prev_g2, player.memory_2)
+            x_restored2, v2, Q_21, a_22, Q_22, s2,g2, V_wave = player.model2(player.prev_g1.detach(), player.prev_action_2, player.prev_g2, player.memory_2)
             player.train_episodes_run+=1
             V_last1 = v1.detach()
             V_last2 = v2.detach()
@@ -398,12 +398,14 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, g_last1, g_last2, tau, g
 #         delta_t2 = (1-gamma1)*(player.values1[i].detach()+D1) + gamma2 * \
 #             player.values2[i + 1].data - player.values2[i].data
 
-        delta_t2 = player.rewards1[i] + gamma2 * \
+        v1_corr = player.values1[i].detach()+D1
+
+        delta_t2 = (1-gamma1)*v1_corr + gamma2 * \
             player.values2[i + 1].data - player.values2[i].data
         
         D2 = D2*gamma2 + delta_t2
         
-        v1_corr = player.values1[i].detach()+D1
+        
         v2_corr = player.values2[i].detach()+D2
                 
 #         #KL loss
