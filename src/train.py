@@ -228,7 +228,9 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
                 return tensor1d[arg].item()
 #             mean_V1 = torch.mean(torch.Tensor(player.values1)).cpu().numpy()
 #             mean_V2 = torch.mean(torch.Tensor(player.values2)).cpu().numpy()
-            mean_Vs_wave = torch.mean(torch.Tensor(player.Vs_wave)).cpu().numpy()
+            mean_Vs2 = torch.mean(torch.Tensor(player.values2)).cpu().numpy()
+            mean_Vs1 = torch.mean(torch.Tensor(player.values1)).cpu().numpy()
+        
             mean_re1 = float(np.mean(player.rewards1))
             max_Q11_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_11s]))
             max_Q11_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_11s]))
@@ -263,7 +265,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             
             f = open(STATg_CSV_PATH, 'a')
             writer = csv.writer(f)
-            writer.writerow([mean_Vs_wave, mean_re1, counter.value, local_counter, max_Q11_1, max_Q11_2, max_Q11_3, max_Q21_1, max_Q21_2, max_Q21_3, max_Q22_1, max_Q22_2, max_Q22_3]+additional_logs)
+            writer.writerow([mean_Vs1, mean_Vs2, mean_re1, counter.value, local_counter, max_Q11_1, max_Q11_2, max_Q11_3, max_Q21_1, max_Q21_2, max_Q21_3, max_Q22_1, max_Q22_2, max_Q22_3]+additional_logs)
             f.close()
             
             
@@ -420,11 +422,12 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, g_last1, g_last2, tau, g
         restoration_loss2 += restoration_loss2_part #*(abs(D1) + abs(D2))
         
         #loss a11
-        v2_reward = v2_reward*gamma1 + (1-gamma1)*v2_corr 
-        target_Q_11 = v1_corr + v2_reward
+#         v2_reward = v2_reward*gamma1 + (1-gamma1)*v2_corr 
+        target_Q_11 = player.values1[i].detach() #v1_corr + v2_reward
         loss_mask = torch.zeros((1,6))
         loss_mask[0][player.actions[i].item()] = 1
         loss_mask = loss_mask.to(player.Q_11s[i].device)
+        
         loss_Q_11 = loss_Q_11 + 0.5 * (((player.Q_11s[i]-target_Q_11)**2)*loss_mask)
         
         #loss a21
@@ -432,7 +435,7 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, g_last1, g_last2, tau, g
 #         #gamma2 * target_Q_21 + (1-gamma1)*player.Q_11s[i].detach()
 #         advantage_Q_21 = target_Q_21 - player.Q_21s[i]
 
-        loss_Q_21 +=  0.5 * ((player.Q_21s[i] - v2_corr).pow(2)).sum()*loss_mask
+        loss_Q_21 +=  0.5 * ((player.Q_21s[i] - player.values2[i].detach()).pow(2)).sum()*loss_mask
         
         loss_mask_Q22 = torch.zeros((1,8))
         loss_mask_Q22[player.a_22s[i]!=0] = 1
@@ -443,7 +446,7 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, g_last1, g_last2, tau, g
 #         target_Q_22 = gamma2 * target_Q_22 + (1-gamma1)*player.values1[i].detach()
 #         advantage_Q_22 = target_Q_22 - player.Q_22s[i]
 #         loss_Q_22 = loss_Q_22 + 0.5 * (advantage_Q_22.pow(2)*loss_mask)
-        loss_Q_22 +=  0.5 * ((player.Q_22s[i] - v2_corr).pow(2)).sum()*loss_mask_Q22
+        loss_Q_22 +=  0.5 * ((player.Q_22s[i] - player.values2[i].detach()).pow(2)).sum()*loss_mask_Q22
         
         #value loss
         V_last2 = gamma2 * V_last2 + (1-gamma1)*v1_corr
