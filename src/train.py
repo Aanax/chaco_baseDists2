@@ -435,7 +435,9 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, g_last1, g_last2, tau, g
         loss_Q_21 +=  0.5 * ((player.Q_21s[i] - v2_corr).pow(2)).sum()*loss_mask
         
         loss_mask_Q22 = torch.zeros((1,8))
-        loss_mask_Q22[player.a_22s[i]>0] = 1
+        loss_mask_Q22[player.a_22s[i]!=0] = 1
+        if loss_mask_Q22.sum()==0:
+            loss_mask_Q22[torch.randint(8,(1,))] = 1
         loss_mask_Q22 = loss_mask.to(player.Q_22s[i].device)
         
 #         target_Q_22 = gamma2 * target_Q_22 + (1-gamma1)*player.values1[i].detach()

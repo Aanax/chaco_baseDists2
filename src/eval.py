@@ -129,7 +129,7 @@ if gpu_id >= 0:
     torch.cuda.manual_seed(args["Training"]["seed"])
 
 # model_path = "./trained_models/PongDeterministic-v4logs_a3c_united_FIX5_vaeMPDI_non_restricted_wmpdi05_eps_0.0_10__21.0.dat"
-model_path = "/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/Pong-v0logs_CHACO_NewInits_fix_6d9b80dc72fbf480e3f3cde8886f4a5397ec375d_eps_0.0_3__-13.0.dat"
+model_path = "/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/Pong-v0logs_NewArch_true2_b64a4483acce9c839906b4692533cd71782f1ee4_eps_0.0_5__-16.0.dat"
 
 # Pong-v0logs_CHACO_f_v31_NDOkNoEnt_Pongv0_b_dist_actor2kld_runmeanLvl1_fix_disbAC_00Mot_fix_gaeModul_32actor2_v1D1_fix3_demin2_V1adDel2_kldGaeModul_sa2runmen_fix_nossep_eps_0.0_5__2.0.dat"
 
@@ -223,11 +223,11 @@ for i_episode in range(1):
     frames_from_lstm = []
     frames_from_lstm_thr = []
     frames_from_lstm_ranged = []
-    Ss = []
+    gs1 = []
     Vs = []
     ss = []
     aas = []
-    Ss2 = []
+    gs2 = []
     Vs2 = []
     ss2 = []
     aas2 = []
@@ -238,6 +238,10 @@ for i_episode in range(1):
     rewards = []
     deltas1=[]
     deltas2=[]
+    
+    Q11s = []
+    Q22s = []
+    Q21s = []
     
     gamma1 = args["Training"]["initial_gamma1"]
     gamma2 = args["Training"]["initial_gamma2"]
@@ -302,22 +306,21 @@ for i_episode in range(1):
             
             
             rewards.append(player.reward)
-            Ss.append(player.last_S.detach().cpu().numpy())
+            gs1.append(player.last_g1.detach().cpu().numpy())
             Vs.append(player.last_v.detach().cpu().numpy())
             ss.append(player.last_s.detach().cpu().numpy())
+            
             aas.append(player.last_a.detach().cpu().numpy())
             
-            aas1.append(player.last_a1.detach().cpu().numpy())
-            aas_base.append(player.last_abase.detach().cpu().numpy())
-
-
+            Q11s.append(player.prev_action_1.detach().cpu().numpy().ravel())
+            Q22s.append(player.prev_action_2.detach().cpu().numpy().ravel())
+            Q21s.append(player.prev_Q21.detach().cpu().numpy().ravel())
             
-            Ss2.append(player.last_S2.detach().cpu().numpy())
+            gs2.append(player.last_g2.detach().cpu().numpy())
             Vs2.append(player.last_v2.detach().cpu().numpy())
             ss2.append(player.last_s2.detach().cpu().numpy())
-            aas2.append(player.last_a2.detach().cpu().numpy())
+#             aas2.append(player.last_a2.detach().cpu().numpy())
             restoreds2.append(player.restored_state2.detach().cpu().numpy())
-            hxs1.append(player.hx1.detach().cpu().numpy())
             
             if len(Vs)>=2:
                 delta_t2 = (1-gamma1)*Vs[-2] + gamma2 * \
@@ -363,16 +366,16 @@ for i_episode in range(1):
 #                     np.save(f, np.array(zs))
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Frames_normalized_orig.npy", 'wb') as f:
                     np.save(f, np.array(frames_normalized_orig))
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"hx1.npy", 'wb') as f:
-                    np.save(f, np.array(player.hx1.detach().cpu().numpy()))
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"hxs1.npy", 'wb') as f:
-                    np.save(f, np.array(hxs1))
+#                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"hx1.npy", 'wb') as f:
+#                     np.save(f, np.array(player.hx1.detach().cpu().numpy()))
+#                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"hxs1.npy", 'wb') as f:
+#                     np.save(f, np.array(hxs1))
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"deltas1.npy", 'wb') as f:
                     np.save(f, np.array(deltas1))
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"deltas2.npy", 'wb') as f:
                     np.save(f, np.array(deltas2))
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"hx2.npy", 'wb') as f:
-                    np.save(f, np.array(player.hx2.detach().cpu().numpy()))
+#                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"hx2.npy", 'wb') as f:
+#                     np.save(f, np.array(player.hx2.detach().cpu().numpy()))
 #                 with open("./"+model_path.split("/")[-1].split(".")[0]+"AFTER_LSTM_decode.npy", 'wb') as f:
 #                     np.save(f, x_orig_lstm)
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"just_decode.npy", 'wb') as f:
@@ -385,33 +388,38 @@ for i_episode in range(1):
                     np.save(f, env.unbiased_mean)
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"unbiased_std.npy", 'wb') as f:
                     np.save(f, env.unbiased_std)
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Ss.npy", 'wb') as f:
-                    np.save(f, np.array(Ss))
+                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"gs1.npy", 'wb') as f:
+                    np.save(f, np.array(gs1))
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"ss.npy", 'wb') as f:
                     np.save(f, np.array(ss))
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Vs.npy", 'wb') as f:
                     np.save(f, np.array(Vs))
                 
                     
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Ss2.npy", 'wb') as f:
-                    np.save(f, np.array(Ss2))
+                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"gs2.npy", 'wb') as f:
+                    np.save(f, np.array(gs2))
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"ss2.npy", 'wb') as f:
                     np.save(f, np.array(ss2))
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Vs2.npy", 'wb') as f:
                     np.save(f, np.array(Vs2))
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"aas2.npy", 'wb') as f:
-                    np.save(f, np.array(aas2))
+                    
+                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Q11s.npy", 'wb') as f:
+                    np.save(f, np.array(Q11s))
                 
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"aas1.npy", 'wb') as f:
-                    np.save(f, np.array(aas1))
+                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Q22s.npy", 'wb') as f:
+                    np.save(f, np.array(Q22s))
                 
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"aas_base.npy", 'wb') as f:
-                    np.save(f, np.array(aas_base))
+                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Q21s.npy", 'wb') as f:
+                    np.save(f, np.array(Q21s))
+                    
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"aas.npy", 'wb') as f:
                     np.save(f, np.array(aas))
                     
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"rewards.npy", 'wb') as f:
                     np.save(f, np.array(rewards))
+                
+                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"restoreds2.npy", 'wb') as f:
+                    np.save(f, np.array(restoreds2))
                     
                     
             break

@@ -263,9 +263,11 @@ class Agent(object):
     
             action_probs = F.softmax(Q_11+Q_21)
             action1 = action_probs.multinomial(1).data #?
+            self.last_a = action_probs
             
             self.prev_action_1 = Q_11.detach()
             self.prev_action_2 = Q_22.detach()
+            self.prev_Q21 = Q_21.detach()
             
             self.memory_1 = self.memory_1*self.gamma1 + s1.detach()
             self.memory_2 = self.memory_2*self.gamma2 + s2.detach()
@@ -279,7 +281,7 @@ class Agent(object):
         self.original_state = state
 #         self.original_state2 = g1
         self.restored_state = x_restored1
-#         self.restored_state2 = x_restored2
+        self.restored_state2 = x_restored2
         
 #         self.restored_after_lstm = self.model.Decoder2(S)
 #         self.g1_prev = g1.detach()
@@ -288,6 +290,7 @@ class Agent(object):
 #         self.a2_prev = a2.detach()
         
         self.last_g2 = g2
+        self.last_g1 = g1
         self.last_v = v1
         self.last_v2 = v2
         self.last_s = s1
