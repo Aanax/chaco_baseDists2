@@ -189,26 +189,28 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             kld_loss1, policy_loss1, value_loss1, MPDI_loss1, kld_loss2, policy_loss2, value_loss2, MPDI_loss2, policy_loss_base, kld_loss_actor2, loss_restoration1,loss_restoration2, ce_loss1, ce_loss_base = losses
             
             #value_loss1,
-            restoration_loss1, loss_Q_11, loss_Q_21, value_loss1, value_loss2, g_loss2, loss_Q_22, g_loss1, restoration_loss2 = losses
+            restoration_loss1, loss_Q_11, loss_Q_21, g_loss2, loss_Q_22, g_loss1, restoration_loss2 = losses
+            
+            #value_loss1, value_loss2,
             
             losses = list(losses)
-            loss_Q11_non_summed_components = loss_Q_11
-            loss_Q21_non_summed_components = loss_Q_21
-            loss_Q22_non_summed_components = loss_Q_22
+#             loss_Q11_non_summed_components = loss_Q_11
+#             loss_Q21_non_summed_components = loss_Q_21
+#             loss_Q22_non_summed_components = loss_Q_22
             
-            loss_Q_11 = loss_Q_11.sum()
-            loss_Q_21 = loss_Q_21.sum()
-            loss_Q_22 = loss_Q_22.sum()
+#             loss_Q_11 = loss_Q_11.sum()
+#             loss_Q_21 = loss_Q_21.sum()
+#             loss_Q_22 = loss_Q_22.sum()
             
-            losses[1] = loss_Q_11
-            losses[2] = loss_Q_21
-            losses[6] = loss_Q_22
+#             losses[1] = loss_Q_11
+#             losses[2] = loss_Q_21
+#             losses[6] = loss_Q_22
 #             loss1 = (args["Training"]["w_policy"]*loss_Q_11)
             (args["Training"]["w_policy"]*loss_Q_11).backward(retain_graph=True)
             (args["Training"]["w_policy"]*loss_Q_21).backward(retain_graph=True)
             (args["Training"]["w_policy"]*loss_Q_22).backward(retain_graph=True)
-            (args["Training"]["w_value"]*value_loss2).backward(retain_graph=True)
-            (args["Training"]["w_value"]*value_loss1).backward(retain_graph=True)
+#             (args["Training"]["w_value"]*value_loss2).backward(retain_graph=True)
+#             (args["Training"]["w_value"]*value_loss1).backward(retain_graph=True)
 #             loss2 = (args["Training"]["w_policy"]*loss_Q_21+args["Training"]["w_value"]*value_loss2+args["Training"]["w_policy"]*loss_Q_22)
 #             (args["Training"]["w_kld"]*kld_loss1).backward(retain_graph=True)
 #             (args["Training"]["w_kld"]*kld_loss2).backward(retain_graph=True)
@@ -250,18 +252,18 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
                 else:
                     additional_logs.append(loss_i)
                     
-            print("loss_Q11_non_summed_components ", loss_Q11_non_summed_components.shape, flush=True)
-            for qloss in loss_Q11_non_summed_components.squeeze():
-                if not (qloss == 0):
-                    additional_logs.append(qloss.item())
-                else:
-                    additional_logs.append(qloss)
+#             print("loss_Q11_non_summed_components ", loss_Q11_non_summed_components.shape, flush=True)
+#             for qloss in loss_Q11_non_summed_components.squeeze():
+#                 if not (qloss == 0):
+#                     additional_logs.append(qloss.item())
+#                 else:
+#                     additional_logs.append(qloss)
             
-            for qloss in loss_Q21_non_summed_components.squeeze():
-                if not (qloss == 0):
-                    additional_logs.append(qloss.item())
-                else:
-                    additional_logs.append(qloss)
+#             for qloss in loss_Q21_non_summed_components.squeeze():
+#                 if not (qloss == 0):
+#                     additional_logs.append(qloss.item())
+#                 else:
+#                     additional_logs.append(qloss)
             
             f = open(STATg_CSV_PATH, 'a')
             writer = csv.writer(f)
@@ -284,6 +286,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 
 #             loss1.backward()#retain_graph=False)
 #             loss2.backward()#retain_graph=False)
+            
 
             ensure_shared_grads(player.model1, shared_model[0], gpu=gpu_id >= 0)
             ensure_shared_grads(player.model2, shared_model[1], gpu=gpu_id >= 0)
@@ -291,6 +294,10 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             player.clear_actions()
             player.model1.zero_grad()
             player.model2.zero_grad()
+            
+            for p in player.model2.actor_base2.parameters():
+                p.data.clamp_(0)
+            
 #             del loss1
 #             del loss2
 
@@ -410,55 +417,46 @@ def train_A3C_united(player, V_last1, V_last2, s_last1, g_last1, g_last2, tau, g
         
         v2_corr = player.values2[i].detach()+D2
                 
-#         #KL loss
-#         kld_delta1, kld_delta2 = kld_loss_calc(player, i)
-#         kld_loss1+=kld_delta1 #*(abs(D1) + abs(D2))
-#         kld_loss2+=kld_delta2 #*abs(D2)
         
         restoration_loss1_part = (player.restoreds1[i] - player.restore_labels1[i]).pow(2).sum()
         restoration_loss1 += restoration_loss1_part #*(abs(D1) + abs(D2))
         
         restoration_loss2_part = (player.restoreds2[i] - player.restore_labels2[i]).pow(2).sum()
         restoration_loss2 += restoration_loss2_part #*(abs(D1) + abs(D2))
-        
-        #loss a11
-#         v2_reward = v2_reward*gamma1 + (1-gamma1)*v2_corr 
-        target_Q_11 = player.values1[i].detach() #v1_corr + v2_reward
-        loss_mask = torch.zeros((1,6))
-        loss_mask[0][player.actions[i].item()] = 1
-        loss_mask = loss_mask.to(player.Q_11s[i].device)
-        
-        loss_Q_11 = loss_Q_11 + 0.5 * (((player.Q_11s[i]-target_Q_11)**2)*loss_mask)
-        
+                
         #loss a21
-#         target_Q_21 = 
-#         #gamma2 * target_Q_21 + (1-gamma1)*player.Q_11s[i].detach()
-#         advantage_Q_21 = target_Q_21 - player.Q_21s[i]
-
-        loss_Q_21 +=  0.5 * ((player.Q_21s[i] - player.values2[i].detach()).pow(2)).sum()*loss_mask
+        target_Q_21 = gamma2 * target_Q_21 + (1-gamma1)*player.Q_11s[i].detach()
+        advantage_Q_21 = target_Q_21 - player.Q_21s[i]
+        loss_Q_21 +=  0.5 * ((player.Q_21s[i] - target_Q_21).pow(2)).sum() #*loss_mask
         
-        loss_mask_Q22 = torch.zeros((1,8))
-        loss_mask_Q22[player.a_22s[i]!=0] = 1
-        if loss_mask_Q22.sum()==0:
-            loss_mask_Q22[torch.randint(8,(1,))] = 1
-        loss_mask_Q22 = loss_mask.to(player.Q_22s[i].device)
+        
         
 #         target_Q_22 = gamma2 * target_Q_22 + (1-gamma1)*player.values1[i].detach()
 #         advantage_Q_22 = target_Q_22 - player.Q_22s[i]
 #         loss_Q_22 = loss_Q_22 + 0.5 * (advantage_Q_22.pow(2)*loss_mask)
-        loss_Q_22 +=  0.5 * ((player.Q_22s[i] - player.values2[i].detach()).pow(2)).sum()*loss_mask_Q22
+#         loss_Q_22 +=  0.5 * ((player.Q_22s[i] - player.values2[i].detach()).pow(2)).sum()*loss_mask_Q22
         
-        #value loss
+    
+        loss_mask_Q22 = torch.zeros((1,8))
+        loss_mask_Q22[0][player.a_22s[i][0]>=player.values2[i]] = 1
+        if loss_mask_Q22.sum()==0:
+            loss_mask_Q22[0][torch.randint(8,(1,))] = 1
+        loss_mask_Q22 = loss_mask_Q22.to(player.Q_22s[i].device)
+    
         V_last2 = gamma2 * V_last2 + (1-gamma1)*v1_corr
-        #gamma2 * V_last2 + (1-gamma1)*player.values1[i].detach()
         advantage2 = V_last2 - player.values2[i]
-        value_loss2 = value_loss2 + 0.5 * advantage2.pow(2)
-        
+        loss_Q_22 = loss_Q_22 + ((0.5 * advantage2.pow(2))*loss_mask_Q22).sum()
+
+
+        loss_mask = torch.zeros((1,6))
+        loss_mask[0][player.actions[i].item()] = 1
+        loss_mask = loss_mask.to(player.Q_11s[i].device)
+                
         V_last1 = gamma1 * V_last1 + player.rewards1[i]
         advantage1 = V_last1 - player.values1[i]
-        value_loss1 = value_loss1 + 0.5 * advantage1.pow(2)
+        loss_Q_11 = loss_Q_11 + ((0.5 * advantage1.pow(2))*loss_mask).sum()
 
 
-    #value_loss1*0,
-    return restoration_loss1, loss_Q_11, loss_Q_21, value_loss1, value_loss2, g_loss2, loss_Q_22, g_loss1, restoration_loss2
+    #value_loss1*0,value_loss1, value_loss2,
+    return restoration_loss1, loss_Q_11, loss_Q_21, g_loss2, loss_Q_22, g_loss1, restoration_loss2
 

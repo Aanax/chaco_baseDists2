@@ -104,14 +104,12 @@ class Encoder(nn.Module):
 class Level1(nn.Module):
     def __init__(self, args, shap, n_actions, device):
         super(Level1, self).__init__()
-        
-        
-#         self.oracle = Oracle({},device)
+        #         self.oracle = Oracle({},device)
         self.decoder = Decoder({}, device)
         self.oracle = Oracle({}, device)
         self.encoder = Encoder(args, device)
         self.actor = nn.Linear(12800*2, 6)
-        self.critic = nn.Linear(12800*2, 1)
+#         self.critic = nn.Linear(12800*2, 1)
        
         for m in self.children():
             if not hasattr(m,"name"):
@@ -119,15 +117,12 @@ class Level1(nn.Module):
         self.decoder.apply(init_decoder)
 #         self.oracle.apply(init_base)
 #         self.ConvLSTM_mu.apply(init_base)
-                        
         self.actor.weight.data = norm_col_init(
         self.actor.weight.data, args["Model"]["a_init_std"])
         self.actor.bias.data.fill_(0)
-        
-        self.critic.weight.data = norm_col_init(
-        self.critic.weight.data, args["Model"]["v_init_std"])
-        self.critic.bias.data.fill_(0) 
-
+#         self.critic.weight.data = norm_col_init(
+#         self.critic.weight.data, args["Model"]["v_init_std"])
+#         self.critic.bias.data.fill_(0) 
         self.train()
         self.z_EMA_t = 0
 
@@ -143,9 +138,9 @@ class Level1(nn.Module):
         z = torch.cat([g.detach(),s], dim=1)
         z = z.view(z.size(0), -1)
         
-        v = self.critic(z)
-        
         Q11 = self.actor(z)
+        
+        v = Q11.mean() #self.critic(z)
         
 #         print("DECODEd shape ", decoded.shape, flush=True)
         return decoded,v,Q11, s, g #, hx, cx, s,S  
@@ -228,7 +223,7 @@ class Level2(nn.Module):
         self.decoder2 = Decoder2({}, device)
         self.actor2 = nn.Linear(64*5*5*2, 8) #Actor2(args,device)
         self.actor_base2 = nn.Linear(8, 6)
-        self.critic2 = nn.Linear(64*5*5*2, 1)
+#         self.critic2 = nn.Linear(64*5*5*2, 1)
         for m in self.children():
             if not hasattr(m,"name"):
                 m.name = None
@@ -236,53 +231,34 @@ class Level2(nn.Module):
         self.actor2.weight.data = norm_col_init(
         self.actor2.weight.data, args["Model"]["a_init_std"])
         self.actor2.bias.data.fill_(0)
-        self.actor_base2.weight.data = norm_col_init(
-        self.actor_base2.weight.data, args["Model"]["a_init_std"])
+        
+        print("max(self.actor_base2.weight.data.shape) ", max(self.actor_base2.weight.data.shape))
+        expDist = torch.distributions.Exponential(np.sqrt(32))
+        self.actor_base2.weight.data = expDist.rsample(self.actor_base2.weight.data.shape)#norm_col_init(
+#         self.actor_base2.weight.data, args["Model"]["a_init_std"])
         self.actor_base2.bias.data.fill_(0)
-        
-        self.critic2.weight.data = norm_col_init(
-        self.critic2.weight.data, args["Model"]["v_init_std"])
-        self.critic2.bias.data.fill_(0) 
-        
+#         self.critic2.weight.data = norm_col_init(
+#         self.critic2.weight.data, args["Model"]["v_init_std"])
+#         self.critic2.bias.data.fill_(0) 
         self.train()
         self.s_mean=0
         self.smean_not_set = True
         self.z_EMA_t = 0
         
     def forward(self, x, previous_action, previous_g, memory): 
-        
-#         x = torch.cat(x, dim=1)
         s = self.encoder2(x)
-        
         decoded = self.decoder2(s)
-        
-#         print(prev_action.shape)
-#         prev_action = prev_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,8,5,5)).detach()
-#         hx, cx = self.ConvLSTM_mu2(s.detach(), (hx2.detach(),cx2.detach()), prev_action.detach()) #(states[0][0][0],states[0][1][0]))
-    
         g = self.oracle2(s, previous_action, previous_g, memory)
-        
-#         print(S.shape)
-        
-#         z = S.detach() - s
         z = torch.cat([g.detach(),s], dim=1)
-        
         z = z.view(z.size(0), -1)
-        
-        v2 = self.critic2(z)
-        
         Q_22 = self.actor2(z)
-        
-#         pi = F.softmax(Q_22)
+        v2 = Q_22.mean() #self.critic2(z)
         V_wave = v2 #(pi*Q_22).sum()
-        
+        a_22 = Q_22
 #         a_22 =  #((Q_22-V_wave.detach())>=0).float()
-        
-        smax = F.softmax(Q_22, dim=1)
-        a_22 = T.zeros_like(smax)
-        argmax = smax[0].multinomial(1).data #T.argmax(smax[0])
-        a_22[0][argmax] = (Q_22)[0][argmax]
-        
-        Q_21 = self.actor_base2(a_22.view(a_22.size(0), -1).detach())
-        
+#         smax = F.softmax(Q_22, dim=1)
+#         a_22 = T.zeros_like(smax)
+#         argmax = smax[0].multinomial(1).data #T.argmax(smax[0])
+#         a_22[0][argmax] = (Q_22)[0][argmax]
+        Q_21 = self.actor_base2(Q_22.detach())
         return decoded, v2, Q_21, a_22, Q_22, s,g, V_wave
