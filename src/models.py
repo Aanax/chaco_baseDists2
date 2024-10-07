@@ -41,16 +41,18 @@ class Oracle(nn.Module):
     def __init__(self, args, device):#1024
         super(Oracle, self).__init__()
         # 102
-        self.conv = nn.Conv2d(32+6+32+32, 64, 5, stride=1, padding=2)
+        self.conv = nn.Conv2d(32+32+32+6+6, 64, 5, stride=1, padding=2)
         self.conv2 = nn.Conv2d(64, 32, 5, stride=1, padding=2)
 
-    def forward(self, x, previous_action, previous_g, memory):
-        
+    def forward(self, x, previous_action, previous_action2, previous_g, memory):
+#         print("previous_action2.shape ",previous_action2.shape)
         previous_action = previous_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,20,20)).detach()
+        previous_action2 = previous_action2.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,20,20)).detach()
+        
         #prev_g 1,32,20,20
         #memory 1,32,20,20
 
-        x = torch.cat([x, previous_action, previous_g, memory], dim=1)
+        x = torch.cat([x, previous_action, previous_action2, previous_g, memory], dim=1)
         
         x = F.relu(self.conv(x))
         x = self.conv2(x)
@@ -126,14 +128,14 @@ class Level1(nn.Module):
         self.train()
         self.z_EMA_t = 0
 
-    def forward(self, x, previous_action, previous_g, memory):
+    def forward(self, x, previous_action, previous_action2, previous_g, memory):
 #          = x
         
         s = self.encoder(x)
        
         decoded = self.decoder(s)
                 
-        g = self.oracle(s.detach(), previous_action.detach(), previous_g.detach(), memory.detach())
+        g = self.oracle(s.detach(), previous_action.detach(), previous_action2.detach(), previous_g.detach(), memory.detach())
                         
         z = torch.cat([g.detach(),s], dim=1)
         z = z.view(z.size(0), -1)
@@ -161,12 +163,12 @@ class Oracle2(nn.Module):
     def __init__(self, args, device):#1024
         super(Oracle2, self).__init__()
         
-        self.conv = nn.Conv2d(64+64+8+64, 128, 5, stride=1, padding=2)
+        self.conv = nn.Conv2d(64+64+6+64, 128, 5, stride=1, padding=2)
         self.conv2 = nn.Conv2d(128, 64, 5, stride=1, padding=2)
 
     def forward(self,x, previous_action, previous_g, memory):
         
-        previous_action = previous_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,8,5,5)).detach()
+        previous_action = previous_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,5,5)).detach()
         #prev_g 1,32,5,5
         #memory 1,32,5,5
 
@@ -221,8 +223,8 @@ class Level2(nn.Module):
         self.encoder2 = Encoder2(args, device)
         self.oracle2 = Oracle2({},device)
         self.decoder2 = Decoder2({}, device)
-        self.actor2 = nn.Linear(64*5*5*2, 8) #Actor2(args,device)
-        self.actor_base2 = nn.Linear(8, 6)
+        self.actor2 = nn.Linear(64*5*5*2, 6) #Actor2(args,device)
+#         self.actor_base2 = nn.Linear(32, 6)
 #         self.critic2 = nn.Linear(64*5*5*2, 1)
         for m in self.children():
             if not hasattr(m,"name"):
@@ -232,11 +234,14 @@ class Level2(nn.Module):
         self.actor2.weight.data, args["Model"]["a_init_std"])
         self.actor2.bias.data.fill_(0)
         
-        print("max(self.actor_base2.weight.data.shape) ", max(self.actor_base2.weight.data.shape))
-        expDist = torch.distributions.Exponential(np.sqrt(32))
-        self.actor_base2.weight.data = expDist.rsample(self.actor_base2.weight.data.shape)#norm_col_init(
+#         print("max(self.actor_base2.weight.data.shape) ", max(self.actor_base2.weight.data.shape))
+#         expDist = torch.distributions.Exponential(np.sqrt(32))
+#         uni = torch.distributions.uniform.Uniform(0, 2/32) #2*np.sqrt(3)/np.sqrt(32))
+#         self.actor_base2.weight.data = uni.rsample(self.actor_base2.weight.data.shape)
+        #expDist.rsample(self.actor_base2.weight.data.shape)
+        #norm_col_init(
 #         self.actor_base2.weight.data, args["Model"]["a_init_std"])
-        self.actor_base2.bias.data.fill_(0)
+#         self.actor_base2.bias.data.fill_(0)
 #         self.critic2.weight.data = norm_col_init(
 #         self.critic2.weight.data, args["Model"]["v_init_std"])
 #         self.critic2.bias.data.fill_(0) 
@@ -260,5 +265,5 @@ class Level2(nn.Module):
 #         a_22 = T.zeros_like(smax)
 #         argmax = smax[0].multinomial(1).data #T.argmax(smax[0])
 #         a_22[0][argmax] = (Q_22)[0][argmax]
-        Q_21 = self.actor_base2(Q_22.detach())
-        return decoded, v2, Q_21, a_22, Q_22, s,g, V_wave
+#         Q_21 = 0 #self.actor_base2(Q_22.detach())
+        return decoded, v2, a_22, Q_22, s,g, V_wave #Q_21,

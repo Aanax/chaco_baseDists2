@@ -129,7 +129,7 @@ if gpu_id >= 0:
     torch.cuda.manual_seed(args["Training"]["seed"])
 
 # model_path = "./trained_models/PongDeterministic-v4logs_a3c_united_FIX5_vaeMPDI_non_restricted_wmpdi05_eps_0.0_10__21.0.dat"
-model_path = "/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/Pong-v0logs_NewArch_true_e8911ab65531d31b102b569eb1c47fe790c7294d_eps_0.0_6__-17.0.dat"
+model_path = "/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/Pong-v0logs_NewArch_test6_0aa7c67306b4cd50380b070342ed2ca59750b78c_eps_0.0_1__-16.0.dat"
 
 # Pong-v0logs_CHACO_f_v31_NDOkNoEnt_Pongv0_b_dist_actor2kld_runmeanLvl1_fix_disbAC_00Mot_fix_gaeModul_32actor2_v1D1_fix3_demin2_V1adDel2_kldGaeModul_sa2runmen_fix_nossep_eps_0.0_5__2.0.dat"
 
@@ -307,17 +307,17 @@ for i_episode in range(1):
             
             rewards.append(player.reward)
             gs1.append(player.last_g1.detach().cpu().numpy())
-            Vs.append(player.last_v.detach().cpu().numpy())
+            Vs.append(player.last_v.detach().cpu().item())
             ss.append(player.last_s.detach().cpu().numpy())
             
             aas.append(player.last_a.detach().cpu().numpy())
             
-            Q11s.append(player.prev_action_1.detach().cpu().numpy().ravel())
+            Q11s.append(player.prev_Q11.detach().cpu().numpy().ravel())
             Q22s.append(player.prev_action_2.detach().cpu().numpy().ravel())
-            Q21s.append(player.prev_Q21.detach().cpu().numpy().ravel())
+#             Q21s.append(player.prev_Q21.detach().cpu().numpy().ravel())
             
             gs2.append(player.last_g2.detach().cpu().numpy())
-            Vs2.append(player.last_v2.detach().cpu().numpy())
+            Vs2.append(player.last_v2.detach().cpu().item())
             ss2.append(player.last_s2.detach().cpu().numpy())
 #             aas2.append(player.last_a2.detach().cpu().numpy())
             restoreds2.append(player.restored_state2.detach().cpu().numpy())
@@ -409,8 +409,8 @@ for i_episode in range(1):
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Q22s.npy", 'wb') as f:
                     np.save(f, np.array(Q22s))
                 
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Q21s.npy", 'wb') as f:
-                    np.save(f, np.array(Q21s))
+#                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Q21s.npy", 'wb') as f:
+#                     np.save(f, np.array(Q21s))
                     
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"aas.npy", 'wb') as f:
                     np.save(f, np.array(aas))
