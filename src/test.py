@@ -13,7 +13,7 @@ import copy
 
 
 from models import Level1
-from models import Level2
+# from models import Level2
 
 def test(args, shared_model, env_conf, counter, num):
     ptitle('Test Agent')
@@ -51,10 +51,10 @@ def test(args, shared_model, env_conf, counter, num):
 #     AgentClass = eval(args["Training"]["agent)
     _model1 = Level1(args, env.observation_space.shape[0],
                            env.action_space, device = "cuda:"+str(gpu_id))
-    _model2 = Level2(args, env.observation_space.shape[0],
-                           env.action_space, device = "cuda:"+str(gpu_id))
+#     _model2 = Level2(args, env.observation_space.shape[0],
+#                            env.action_space, device = "cuda:"+str(gpu_id))
     
-    player = Agent(_model1, _model2, env, args, None, gpu_id) #Agent(None, env, args, None)
+    player = Agent(_model1, None, env, args, None, gpu_id) #Agent(None, env, args, None)
     
     
     
@@ -68,7 +68,7 @@ def test(args, shared_model, env_conf, counter, num):
     if gpu_id >= 0:
         with torch.cuda.device(gpu_id):
             player.model1 = player.model1.cuda()
-            player.model2 = player.model2.cuda()
+#             player.model2 = player.model2.cuda()
             player.state = player.state.cuda()
     flag = True
     max_score = -20
@@ -86,12 +86,12 @@ def test(args, shared_model, env_conf, counter, num):
             if gpu_id >= 0:
                 with torch.cuda.device(gpu_id):
                     player.model1.load_state_dict(shared_model[0].state_dict())
-                    player.model2.load_state_dict(shared_model[1].state_dict())
+#                     player.model2.load_state_dict(shared_model[1].state_dict())
             else:
                 player.model1.load_state_dict(shared_model[0].state_dict())
-                player.model2.load_state_dict(shared_model[1].state_dict())
+#                 player.model2.load_state_dict(shared_model[1].state_dict())
             player.model1.eval()
-            player.model2.eval()
+#             player.model2.eval()
             flag = False
         
 

@@ -119,14 +119,15 @@ if __name__ == '__main__':
     env = atari_env(args["Training"]["env"], env_conf, args)
     
     model_params_dict = args["Model"]
-    shared_model = torch.nn.Sequential(Level1(args, env.observation_space.shape[0], env.action_space, device="cpu"), Level2(args, env.observation_space.shape[0], env.action_space, device="cpu"))
+    shared_model = torch.nn.Sequential(Level1(args, env.observation_space.shape[0], env.action_space, device="cpu"))
+    #, Level2(args, env.observation_space.shape[0], env.action_space, device="cpu"))
         
     shared_model.share_memory()
 
     optimizer = SharedAdam(
         [
-        {'params': shared_model[0].parameters(), 'lr': args["Training"]["lr"]}, #0.001},
-        {'params': shared_model[1].parameters(), 'lr': args["Training"]["lr"]},], #*0.05
+        {'params': shared_model[0].parameters(), 'lr': args["Training"]["lr"]},], #0.001},
+#         {'params': shared_model[1].parameters(), 'lr': args["Training"]["lr"]},], #*0.05
         lr=args["Training"]["lr"], amsgrad=args["Training"]["amsgrad"]   
         )
 #     optimizer_decoders = SharedAdam(

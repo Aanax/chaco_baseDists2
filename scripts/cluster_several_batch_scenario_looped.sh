@@ -3,11 +3,10 @@
 #SBATCH -D /s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/
 #SBATCH -o /s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/logs/%j.out
 #SBATCH -e /s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/logs/%j.err
-#SBATCH -t 11:30:00
+#SBATCH -t 11:10:00
 #SBATCH --nodes 1
 #SBATCH --gres=gpu:4
-#SBATCH -p hpc4-el7-gpu-3d
-
+#SBATCH -p hpc5-el7-gpu-3d
 
 export CUDA_HOME=/s/ls4/sw/cuda/10.1/
 export LD_LIBRARY_PATH="/s/ls4/sw/cuda/10.1/lib64:$LD_LIBRARY_PATH"
