@@ -287,12 +287,12 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             loss1.backward()#retain_graph=False)
 #             loss2.backward()#retain_graph=False)
             
-
-            ensure_shared_grads(player.model1, shared_model[0], gpu=gpu_id >= 0)
-#             ensure_shared_grads(player.model2, shared_model[1], gpu=gpu_id >= 0)
-            optimizer.step()
-            player.clear_actions()
-            player.model1.zero_grad()
+            if len(player.rewards1)>2:
+                ensure_shared_grads(player.model1, shared_model[0], gpu=gpu_id >= 0)
+    #             ensure_shared_grads(player.model2, shared_model[1], gpu=gpu_id >= 0)
+                optimizer.step()
+                player.clear_actions()
+                player.model1.zero_grad()
 #             player.model2.zero_grad()
             
 #             for p in shared_model[1].actor_base2.parameters():
@@ -421,11 +421,21 @@ def train_A3C_united(player, V_last1, s_last1, g_last1, tau, gamma1, w_curiosity
         loss_mask[0][player.actions[i].item()] = 1
         loss_mask = loss_mask.to(player.Q_11s[i].device)
                 
+        
         V_last1 = gamma1 * V_last1 + player.rewards1[i]
         advantage1 = V_last1 - player.values1[i]
-        k=loss_mask.sum()
+#         k=loss_mask.sum()
+        ps = torch.nn.functional.softmax(player.Q_11s[i]).detach()
+        ps_modified = 1
+#         ps_modified = (1+(1-ps)*player.Q_11s[i].detach())
+#         if advantage1 >= 0:
+#             paste_value = 0.01
+#         else:
+#             paste_value = 0.0
+            
+#         ps_modified[ps_modified<0.01] = paste_value
 #         loss_Q_11 = loss_Q_11 + ((0.5 * advantage1.pow(2))*loss_mask).sum()*(6/k)
-        loss_V1 = loss_V1 - advantage1.detach() * (player.Q_11s[i]*loss_mask).sum() * (1/k)
+        loss_V1 = loss_V1 - advantage1.detach() * (player.Q_11s[i]*loss_mask*ps_modified).sum() #* (1/k)
 
 
     #value_loss1*0,value_loss1, value_loss2, #loss_Q_21,

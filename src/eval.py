@@ -129,7 +129,8 @@ if gpu_id >= 0:
     torch.cuda.manual_seed(args["Training"]["seed"])
 
 # model_path = "./trained_models/PongDeterministic-v4logs_a3c_united_FIX5_vaeMPDI_non_restricted_wmpdi05_eps_0.0_10__21.0.dat"
-model_path = "/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/Pong-v0logs_NewArch_test6_0aa7c67306b4cd50380b070342ed2ca59750b78c_eps_0.0_1__-16.0.dat"
+model_path = "/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/Pong-v0logs_NewArch_true09375_1minus2_long_fix2_91507d094e279e131558baf401ca0427759d76d3_eps_0.0_4__-16.0.dat"
+#Pong-v0logs_NewArch_test6_0aa7c67306b4cd50380b070342ed2ca59750b78c_eps_0.0_1__-16.0.dat"
 
 # Pong-v0logs_CHACO_f_v31_NDOkNoEnt_Pongv0_b_dist_actor2kld_runmeanLvl1_fix_disbAC_00Mot_fix_gaeModul_32actor2_v1D1_fix3_demin2_V1adDel2_kldGaeModul_sa2runmen_fix_nossep_eps_0.0_5__2.0.dat"
 
@@ -167,17 +168,17 @@ reward_total_sum = 0
 model_params_dict = args["Model"]
 _model1 = Level1(args, env.observation_space.shape[0],
                        env.action_space, device = "cuda:"+str(gpu_id))
-_model2 = Level2(args, env.observation_space.shape[0],
-                       env.action_space, device = "cuda:"+str(gpu_id))
+# _model2 = Level2(args, env.observation_space.shape[0],
+#                        env.action_space, device = "cuda:"+str(gpu_id))
 
-player = Agent(_model1, _model2, env, args, None, gpu_id)
+player = Agent(_model1, None, env, args, None, gpu_id) #_model2
 # player.rank = rank
 
 player.gpu_id = gpu_id
 if gpu_id >= 0:
     with torch.cuda.device(gpu_id):
         player.model1 = player.model1.cuda()
-        player.model2 = player.model2.cuda()
+#         player.model2 = player.model2.cuda()
 # if args.new_gym_eval:
 #     player.env = gym.wrappers.Monitor(
 #         player.env, "{}_monitor".format(args.env), force=True)
@@ -188,13 +189,13 @@ d2 = saved_state.__class__({key[2:]: value for (key, value) in saved_state.items
 if gpu_id >= 0:
     with torch.cuda.device(gpu_id):
         player.model1.load_state_dict(d1)
-        player.model2.load_state_dict(d2)
+#         player.model2.load_state_dict(d2)
 else:
     player.model1.load_state_dict(d1)
-    player.model2.load_state_dict(d2)
+#     player.model2.load_state_dict(d2)
 
 player.model1.eval()
-player.model2.eval()
+# player.model2.eval()
 
 
 import os
@@ -313,19 +314,19 @@ for i_episode in range(1):
             aas.append(player.last_a.detach().cpu().numpy())
             
             Q11s.append(player.prev_Q11.detach().cpu().numpy().ravel())
-            Q22s.append(player.prev_action_2.detach().cpu().numpy().ravel())
+#             Q22s.append(player.prev_action_2.detach().cpu().numpy().ravel())
 #             Q21s.append(player.prev_Q21.detach().cpu().numpy().ravel())
             
-            gs2.append(player.last_g2.detach().cpu().numpy())
-            Vs2.append(player.last_v2.detach().cpu().item())
-            ss2.append(player.last_s2.detach().cpu().numpy())
+#             gs2.append(player.last_g2.detach().cpu().numpy())
+#             Vs2.append(player.last_v2.detach().cpu().item())
+#             ss2.append(player.last_s2.detach().cpu().numpy())
 #             aas2.append(player.last_a2.detach().cpu().numpy())
-            restoreds2.append(player.restored_state2.detach().cpu().numpy())
+#             restoreds2.append(player.restored_state2.detach().cpu().numpy())
             
             if len(Vs)>=2:
-                delta_t2 = (1-gamma1)*Vs[-2] + gamma2 * \
-                Vs2[-1] - Vs2[-2]
-                deltas2.append(delta_t2)
+#                 delta_t2 = (1-gamma1)*Vs[-2] + gamma2 * \
+#                 Vs2[-1] - Vs2[-2]
+#                 deltas2.append(delta_t2)
                 ##+ delta_t2 ?
                 delta_t1 = rewards[-2] + gamma1 * \
                     Vs[-1] - Vs[-2]
@@ -372,8 +373,8 @@ for i_episode in range(1):
 #                     np.save(f, np.array(hxs1))
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"deltas1.npy", 'wb') as f:
                     np.save(f, np.array(deltas1))
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"deltas2.npy", 'wb') as f:
-                    np.save(f, np.array(deltas2))
+#                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"deltas2.npy", 'wb') as f:
+#                     np.save(f, np.array(deltas2))
 #                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"hx2.npy", 'wb') as f:
 #                     np.save(f, np.array(player.hx2.detach().cpu().numpy()))
 #                 with open("./"+model_path.split("/")[-1].split(".")[0]+"AFTER_LSTM_decode.npy", 'wb') as f:
@@ -396,18 +397,18 @@ for i_episode in range(1):
                     np.save(f, np.array(Vs))
                 
                     
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"gs2.npy", 'wb') as f:
-                    np.save(f, np.array(gs2))
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"ss2.npy", 'wb') as f:
-                    np.save(f, np.array(ss2))
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Vs2.npy", 'wb') as f:
-                    np.save(f, np.array(Vs2))
+#                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"gs2.npy", 'wb') as f:
+#                     np.save(f, np.array(gs2))
+#                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"ss2.npy", 'wb') as f:
+#                     np.save(f, np.array(ss2))
+#                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Vs2.npy", 'wb') as f:
+#                     np.save(f, np.array(Vs2))
                     
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Q11s.npy", 'wb') as f:
                     np.save(f, np.array(Q11s))
                 
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Q22s.npy", 'wb') as f:
-                    np.save(f, np.array(Q22s))
+#                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Q22s.npy", 'wb') as f:
+#                     np.save(f, np.array(Q22s))
                 
 #                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Q21s.npy", 'wb') as f:
 #                     np.save(f, np.array(Q21s))
@@ -418,8 +419,8 @@ for i_episode in range(1):
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"rewards.npy", 'wb') as f:
                     np.save(f, np.array(rewards))
                 
-                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"restoreds2.npy", 'wb') as f:
-                    np.save(f, np.array(restoreds2))
+#                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"restoreds2.npy", 'wb') as f:
+#                     np.save(f, np.array(restoreds2))
                     
                     
             break
