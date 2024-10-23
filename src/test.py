@@ -15,7 +15,7 @@ import copy
 from models import Level1
 # from models import Level2
 
-def test(args, shared_model, env_conf, counter, num):
+def test(args, shared_model, env_conf, counter, num, RUN_KEY, lock):
     ptitle('Test Agent')
     gpu_id = args["Training"]["gpu_ids"][-1]
     log = {}
@@ -82,18 +82,32 @@ def test(args, shared_model, env_conf, counter, num):
 #             print("s conv4 weight MAX", torch.max(player.model.conv4.weight.data))
 # #             print("A lstm bias weight MAX", torch.max(player.model.A_lstm.bias_ih))
 #             print("T lstm bias weight MAX", torch.max(player.model.TA_lstm.bias_ih))
-            
-            if gpu_id >= 0:
-                with torch.cuda.device(gpu_id):
-                    player.model1.load_state_dict(shared_model[0].state_dict())
-#                     player.model2.load_state_dict(shared_model[1].state_dict())
-            else:
-                player.model1.load_state_dict(shared_model[0].state_dict())
+            try:
+                with lock:
+                    if gpu_id >= 0:
+                        with torch.cuda.device(gpu_id):
+                            player.model1.load_state_dict(torch.load("./current_state_dict"+str(RUN_KEY)+".torch",
+                                                  weights_only=True))
+                                #shared_model[0].state_dict())
+        #                     player.model2.load_state_dict(shared_model[1].state_dict())
+                    else:
+                        player.model1.load_state_dict(torch.load("./current_state_dict"+str(RUN_KEY)+".torch",
+                                                  weights_only=True))
+            except Exception as e:
+                print(e, flush=True)
+                
+                
 #                 player.model2.load_state_dict(shared_model[1].state_dict())
-            player.model1.eval()
+#             player.model1.eval()
 #             player.model2.eval()
-            flag = False
+#             flag = False
         
+        with open("./q11s_testWeights_debug8.txt", "a") as ff:
+            w=player.model1.state_dict()
+            ff.write(str(w[list(w.keys())[0]][0][0])+'\n\n')
+#             ff.write(str(w[list(w.keys())[4]][0][0])+'\n\n')
+            ff.write(str(w[list(w.keys())[10]][0][0])+'\n\n')
+            ff.write('\n\n\n-------------------------------\n\n\n')
 
         player.action_test()
         rgb_frames.append(player.env.render(mode = 'rgb_array'))

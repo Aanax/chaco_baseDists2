@@ -5,7 +5,7 @@
 #SBATCH -e /s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/logs/%j.err
 #SBATCH -t 22:10:00
 #SBATCH --nodes 1
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:1
 #SBATCH -p hpc5-el7-gpu-3d
 
 export CUDA_HOME=/s/ls4/sw/cuda/10.1/

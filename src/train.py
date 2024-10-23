@@ -5,7 +5,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 # file for train function
 from functools import wraps
 import torch.nn.functional as F
-
+from torch.optim import AdamW
 
 import time
 
@@ -39,7 +39,7 @@ import torch.nn as nn
 
 import copy
     
-def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_start_time="unknown_start_time"):
+def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_start_time="unknown_start_time", RUN_KEY="only"):
     
     #set process title (visible in nvidia-smi!)
     ptitle('Training Agent: {}'.format(rank))
@@ -73,6 +73,15 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
                            env.action_space, device = "cuda:"+str(gpu_id))
 #     _model2 = Level2(args, env.observation_space.shape[0],
 #                            env.action_space, device = "cuda:"+str(gpu_id))
+
+    shared_model[0]=shared_model[0].to('cuda')
+    #redefine optimizer
+    optimizer = AdamW(
+        [
+        {'params': _model1.parameters(), 'lr': args["Training"]["lr"]},], #0.001},
+#         {'params': shared_model[1].parameters(), 'lr': args["Training"]["lr"]},], #*0.05
+        lr=args["Training"]["lr"], amsgrad=args["Training"]["amsgrad"]   
+        )
     
     player = Agent(_model1, None, env, args, None, gpu_id)
     player.rank = rank
@@ -108,7 +117,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
     
 
     kld_loss_calc = _kld_loss_calc
-    
+    n_batch = 0
     
     ### LSTM STATES???
         
@@ -117,12 +126,16 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
         
         #ISTOPPED HERE!!!!!!!!!!!!!!!!!!!
         
-        #load shared weights
-        if gpu_id >= 0:
-            with torch.cuda.device(gpu_id):
-                player.model1.load_state_dict(shared_model[0].state_dict())
-#                 player.model2.load_state_dict(shared_model[1].state_dict())
-        
+        #copy weights
+#         with open("./batch_debug5.txt", "a") as ff:
+#                 ff.write('n_batch%20 '+str(n_batch%20)+'\n')
+        if n_batch%20==0:
+            if gpu_id >= 0:
+                with torch.cuda.device(gpu_id):
+#                     player.model1.load_state_dict(shared_model[0].state_dict())
+                    shared_model[0].load_state_dict(player.model1.state_dict())
+                    with lock:
+                        torch.save(player.model1.state_dict(), "./current_state_dict"+str(RUN_KEY)+".torch")
         # if was done than initializing lstm hiddens with zeros
         #elese initializeing with data
         if player.done:
@@ -133,9 +146,15 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             if player.train_episodes_run_2>=16:
 #                 player.detach_lstm_states(levels=[2])
             
-                
+#         with open("./q11s_trainWeights_debug6.txt", "a") as ff:
+#             w=player.model1.state_dict()
+#             ff.write(str(w[list(w.keys())[0]][0][0])+'\n\n')
+#             ff.write(str(w[list(w.keys())[4]][0][0])+'\n\n')
+#             ff.write(str(w[list(w.keys())[10]][0][0])+'\n\n')
+#             ff.write('\n\n\n-------------------------------\n\n\n')        
 
         # running simulation for num_steps
+        n_batch += 1
         for step in range(args["Training"]["num_steps"]):
             player.action_train()
             with lock:
@@ -167,8 +186,9 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             g_last2 = torch.zeros(1, 1).cuda()
         
         if not player.done:
+#             print("shared_model[0].device ",shared_model[0].device, flush=True)
             state = player.state
-            x_restored1, v1, Q_11, s1, g1 = player.model1(Variable(
+            x_restored1, v1, Q_11, s1, g1 = shared_model[0](Variable(
                 state.unsqueeze(0)), player.prev_action_1, player.prev_g1, player.memory_1)
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
@@ -288,11 +308,11 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             loss2.backward()#retain_graph=False)
             
             if len(player.rewards1)>2:
-                ensure_shared_grads(player.model1, shared_model[0], gpu=gpu_id >= 0)
+#                 ensure_shared_grads(player.model1, shared_model[0], gpu=gpu_id >= 0)
     #             ensure_shared_grads(player.model2, shared_model[1], gpu=gpu_id >= 0)
                 optimizer.step()
-                player.clear_actions()
-                player.model1.zero_grad()
+            player.clear_actions()
+            player.model1.zero_grad()
 #             player.model2.zero_grad()
             
 #             for p in shared_model[1].actor_base2.parameters():
@@ -423,7 +443,7 @@ def train_A3C_united(player, V_last1, s_last1, g_last1, tau, gamma1, w_curiosity
                 
         
         V_last1 = gamma1 * V_last1 + player.rewards1[i]
-        advantage1 = V_last1 - player.values1[i]
+        advantage1 = V_last1 - player.Q_11s[i][0][player.actions[i].item()]#player.values1[i]
 #         k=loss_mask.sum()
         ps = torch.nn.functional.softmax(player.Q_11s[i]).detach()
         ps_modified = 1

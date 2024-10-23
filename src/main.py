@@ -119,7 +119,7 @@ if __name__ == '__main__':
     env = atari_env(args["Training"]["env"], env_conf, args)
     
     model_params_dict = args["Model"]
-    shared_model = torch.nn.Sequential(Level1(args, env.observation_space.shape[0], env.action_space, device="cpu"))
+    shared_model = torch.nn.Sequential(Level1(args, env.observation_space.shape[0], env.action_space, device = "cuda:"+str(0)))#device="cpu"))
     #, Level2(args, env.observation_space.shape[0], env.action_space, device="cpu"))
         
     shared_model.share_memory()
@@ -159,13 +159,15 @@ if __name__ == '__main__':
     except:
         parallel_running_num = 1234
     
-    p = mp.Process(target=test, args=(args, shared_model, env_conf, counter, parallel_running_num))
+    RUN_KEY = time.time()
+    
+    p = mp.Process(target=test, args=(args, shared_model, env_conf, counter, parallel_running_num, RUN_KEY, lock))
     p.start()
     processes.append(p)
     time.sleep(0.1)
     for rank in range(0, int(args["Training"]["workers"])):
         p = mp.Process(
-            target=train, args=(rank, args, shared_model, optimizer, env_conf, lock, counter, parallel_running_num, main_start_time))
+            target=train, args=(rank, args, shared_model, optimizer, env_conf, lock, counter, parallel_running_num, main_start_time, RUN_KEY))
         p.start()
         processes.append(p)
         time.sleep(0.1)

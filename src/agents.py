@@ -122,6 +122,9 @@ class Agent(object):
             x_restored1, v1, Q_11, s1, g1 = self.model1(Variable(
                 self.state.unsqueeze(0)), self.prev_action_1, self.prev_g1, self.memory_1)
             
+#             with open("./q11s_debug3.txt", "a") as ff:
+#                 ff.write("trainsteps_"+str(self.train_episodes_run)+"_EPSLEN_"+str(self.eps_len)+'_Q_'+str(Q_11)+'\n')
+            
 #             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
 #             x_restored2, v2, a_22, Q_22, s2,g2, V_wave = self.model2(self.prev_g1.detach(), self.prev_action_2, self.prev_g2, self.memory_2)
             
@@ -259,6 +262,9 @@ class Agent(object):
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
 #             x_restored2, v2, a_22, Q_22, s2,g2, V_wave = self.model2(self.prev_g1.detach(), self.prev_action_2, self.prev_g2, self.memory_2)
             
+#             with open("./q11s_test_debug3.txt", "a") as ff:
+#                 ff.write("trainsteps_"+str(self.train_episodes_run)+"_EPSLEN_"+str(self.eps_len)+'_Q_'+str(Q_11)+'\n')
+                
             self.prev_Q11 = Q_11
 #             self.prev_Q22 = Q_22
 #             self.a_22_prev = a_22
