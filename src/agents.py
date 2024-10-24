@@ -122,16 +122,6 @@ class Agent(object):
             x_restored1, v1, Q_11, s1, g1 = self.model1(Variable(
                 self.state.unsqueeze(0)), self.prev_action_1, self.prev_g1, self.memory_1)
             
-#             with open("./q11s_debug3.txt", "a") as ff:
-#                 ff.write("trainsteps_"+str(self.train_episodes_run)+"_EPSLEN_"+str(self.eps_len)+'_Q_'+str(Q_11)+'\n')
-            
-#             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
-#             x_restored2, v2, a_22, Q_22, s2,g2, V_wave = self.model2(self.prev_g1.detach(), self.prev_action_2, self.prev_g2, self.memory_2)
-            
-#             self.Q_21_prev = Q_21
-#             self.a_22_prev = a_22.to(Q_22.device)
-            
-#             self.Vs_wave.append(V_wave)
             action_probs = F.softmax(Q_11) #+Q_22)
             action1 = action_probs.multinomial(1).data
             self.actions.append(action1)
@@ -141,42 +131,26 @@ class Agent(object):
             self.prev_action_1[0][action1.item()] = 1
             self.prev_action_1 = self.prev_action_1.to(Q_11.device)
             
-#             self.prev_action_2 = (Q_22.detach()>=v2.detach()).type(torch.float).to(Q_11.device) #Q_11.detach()
-            
-#             self.prev_action_2 = Q_22.detach()
-            
-            self.memory_1 = self.memory_1*self.gamma1 + s1.detach()
-#             self.memory_2 = self.memory_2*self.gamma2 + s2.detach()
-            
+            self.memory_1 = self.memory_1*self.gamma1 + s1.detach()            
             
             self.prev_g1 = g1.detach()
-#             self.prev_g2 = g2.detach()
            
             
             self.train_episodes_run+=1
-#             self.train_episodes_run_2+=1
             self.restoreds1.append(x_restored1)
-#             self.restoreds2.append(x_restored2)
             self.restore_labels1.append(self.state.unsqueeze(0).detach())
-#             self.restore_labels2.append(g1.detach())
         
         state, self.reward, self.done, self.info = self.env.step(
             action1.cpu().numpy())
         
         self.Q_11s.append(Q_11)
-#         self.Q_21s.append(Q_21)
-#         self.Q_22s.append(Q_22)
-#         self.a_22s.append(a_22)
         
         self.state = torch.from_numpy(state).float()
         if self.gpu_id >= 0:
             with torch.cuda.device(self.gpu_id):
                 self.state = self.state.cuda()
         self.reward = max(min(self.reward, 1), -1)
-        
-#         self.alphas1.append(alpha1)
-#         self.alphas2.append(alpha2)
-        
+ 
         
         
         self.values1.append(v1)

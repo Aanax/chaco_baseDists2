@@ -144,11 +144,11 @@ def test(args, shared_model, env_conf, counter, num, RUN_KEY, lock):
                 max_score = reward_sum
                 if gpu_id >= 0:
                     with torch.cuda.device(gpu_id):
-                        state_to_save = shared_model.state_dict()
+                        state_to_save = player.model1.state_dict()
                         torch.save(state_to_save, '{0}{1}{2}_{3}.dat'.format(
                             args["Training"]["save_model_dir"], args["Training"]["env"],architecture_type,reward_sum))
                 else:
-                    state_to_save = shared_model.state_dict()
+                    state_to_save = player.model1.state_dict()
                     torch.save(state_to_save, '{0}{1}{2}_{3}.dat'.format(
                         args["Training"]["save_model_dir"], args["Training"]["env"],architecture_type,reward_sum))
 

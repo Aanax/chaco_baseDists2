@@ -244,6 +244,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             loss2 += args["Training"]["w_MPDI"]*g_loss2
 #             loss1 += args["Training"]["w_MPDI"]*g_loss1
             
+            # player.Q11s = [(1,6)]
 
             def get_max_with_abs(tensor1d):
                 arg = torch.argmax(torch.abs(tensor1d))
@@ -254,7 +255,8 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             mean_Vs1 = torch.mean(torch.Tensor(player.values1)).cpu().numpy()
         
             mean_re1 = float(np.mean(player.rewards1))
-            max_Q11_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_11s]))
+            # ii.shape=(1,6) 
+            max_Q11_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_11s])) #(20)
             max_Q11_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_11s]))
             max_Q11_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_11s]))
 #             max_Q21_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_21s]))

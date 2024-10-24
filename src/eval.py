@@ -129,7 +129,9 @@ if gpu_id >= 0:
     torch.cuda.manual_seed(args["Training"]["seed"])
 
 # model_path = "./trained_models/PongDeterministic-v4logs_a3c_united_FIX5_vaeMPDI_non_restricted_wmpdi05_eps_0.0_10__21.0.dat"
-model_path = "/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/Pong-v0logs_NewArch_true09375_1minus2_long_fix2_ps1_noshortbatchFix_TargetQ_v3_91507d094e279e131558baf401ca0427759d76d3_eps_0.0_1__-15.0.dat"
+model_path = "/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/Pong-v0logs_NewArch_true09375_1minus2_long_fix2_ps1_noshortbatchFix_TargetQ_v3_91507d094e279e131558baf401ca0427759d76d3_eps_0.0_1__-18.0.dat"
+#"/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/
+# cu#rrent_state_dict1729624157.0760121.torch"
 #Pong-v0logs_NewArch_test6_0aa7c67306b4cd50380b070342ed2ca59750b78c_eps_0.0_1__-16.0.dat"
 
 # Pong-v0logs_CHACO_f_v31_NDOkNoEnt_Pongv0_b_dist_actor2kld_runmeanLvl1_fix_disbAC_00Mot_fix_gaeModul_32actor2_v1D1_fix3_demin2_V1adDel2_kldGaeModul_sa2runmen_fix_nossep_eps_0.0_5__2.0.dat"
@@ -183,12 +185,12 @@ if gpu_id >= 0:
 #     player.env = gym.wrappers.Monitor(
 #         player.env, "{}_monitor".format(args.env), force=True)
 
-d1 = saved_state.__class__({key[2:]: value for (key, value) in saved_state.items() if key[0]=='0'})
-d2 = saved_state.__class__({key[2:]: value for (key, value) in saved_state.items() if key[0]=='1'})
+# d1 = saved_state.__class__({key[2:]: value for (key, value) in saved_state.items() if key[0]=='0'})
+# d2 = saved_state.__class__({key[2:]: value for (key, value) in saved_state.items() if key[0]=='1'})
 
 if gpu_id >= 0:
     with torch.cuda.device(gpu_id):
-        player.model1.load_state_dict(d1)
+        player.model1.load_state_dict(saved_state) #d1)
 #         player.model2.load_state_dict(d2)
 else:
     player.model1.load_state_dict(d1)
@@ -314,6 +316,7 @@ for i_episode in range(1):
             aas.append(player.last_a.detach().cpu().numpy())
             
             Q11s.append(player.prev_Q11.detach().cpu().numpy().ravel())
+            print(player.prev_Q11.detach().cpu().numpy().ravel())
 #             Q22s.append(player.prev_action_2.detach().cpu().numpy().ravel())
 #             Q21s.append(player.prev_Q21.detach().cpu().numpy().ravel())
             
