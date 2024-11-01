@@ -7,6 +7,7 @@ from functools import wraps
 import torch.nn.functional as F
 from torch.optim import AdamW
 
+import gc
 import time
 
 import cv2
@@ -220,20 +221,26 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
                              "prev_g1":player.gs1[0].detach()*0,
                              "prev_action1":player.first_batch_action}
             
-            player.replay_buffer.append(new_batch_dict)
+            player.replay_buffer.append(copy.copy(new_batch_dict))
             N_BATCHES_FOR_TRAIN = 1
             batch_for_train = player.replay_buffer.sample(N_BATCHES_FOR_TRAIN)
+            batch_for_train=batch_for_train[0]
             
             prev_g1 = batch_for_train["prev_g1"]#[0]
             prev_action_1 = batch_for_train["prev_action1"]#[0] #?? #put last action from prev bacth!
-            batch["Q_11s"]=[]
-            batch["gs1"]=[]
-            for i in range(len(batch["states"]))
+            batch_for_train["Q_11s"]=[]
+            batch_for_train["gs1"]=[]
+            for i in range(len(batch_for_train["states"])):
                 #predicts
-                x_restored1, v1, Q_11, s1, g1 = player.model1(batch["states"][i], prev_action_1, prev_g1, batch["memories"][i])
-                batch["Q_11s"].append(Q_11)
-                prev_action_1 = batch["actions"][i]
-                prev_g1 = batch["gs1"][i]
+                x_restored1, v1, Q_11, s1, g1 = player.model1(batch_for_train["states"][i], prev_action_1, prev_g1, batch_for_train["memories"][i])
+                batch_for_train["Q_11s"].append(Q_11)
+                
+                action1 = batch_for_train["actions"][i]
+                prev_action_1 = torch.zeros((1,6)).to(Q_11.device)
+                prev_action_1[0][action1.item()] = 1
+                prev_action_1 = prev_action_1.to(Q_11.device)
+                
+                prev_g1 = batch_for_train["prev_g1"]*0 #batch_for_train["gs1"][i]
                     
 
             losses_RB = train_func(batch_for_train, player.gpu_id, V_last1, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len = '1')
@@ -243,12 +250,13 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             kld_loss1, policy_loss1, value_loss1, MPDI_loss1, kld_loss2, policy_loss2, value_loss2, MPDI_loss2, policy_loss_base, kld_loss_actor2, loss_restoration1,loss_restoration2, ce_loss1, ce_loss_base = losses
             
             #value_loss1,
-            restoration_loss1, g_loss1, loss_V1 = losses
-            restoration_loss1_RB, g_loss1_RB, loss_V1_RB = losses_RB
+            restoration_loss1, g_loss1, loss_V1 = losses 
+            restoration_loss1_RB, g_loss1_RB, loss_V1_RB = losses_RB #not using rb g and rest
             
             restoration_loss1+=restoration_loss1_RB
-            g_loss1+=g_loss1_RB
-            loss_V1+=loss_V1_RB
+#             g_loss1+=g_loss1_RB
+#             loss_V1+=loss_V1_RB
+
             # loss_Q_21,
             #value_loss1, value_loss2,
             
@@ -337,6 +345,9 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
                 optimizer.step()
             player.clear_actions()
             player.model1.zero_grad()
+            
+            torch.cuda.empty_cache()
+            gc.collect()
 #             player.model2.zero_grad()
             
 #             for p in shared_model[1].actor_base2.parameters():
@@ -352,13 +363,16 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
     
 def MPDI_loss_calc1(batch_dict, V_last1, g_last1, tau, gamma1, adaptive, i):
     #Discounted Features rewards (s - after encoding S-after lstm)
+#     print('len(batch_dict["gs1"]) ',len(batch_dict["gs1"]))
+#     print('len(batch_dict["rews"]) ',len(batch_dict["rewards"]))
     try:
         g_last1 = g_last1*gamma1 + (1-gamma1)*batch_dict["ss1"][i+1].detach()
         g_advantage1 = g_last1-batch_dict["gs1"][i]
         return g_last1, 0.5 * g_advantage1.pow(2).sum()
+    
     except Exception as e:
 #         print(e, flush=True)
-        return g_last1, (g_last1-player.gs1[0]).sum()*0
+        return g_last1, (g_last1-batch_dict["gs1"][0]).sum()*0
 
 def MPDI_loss_calc2(player, V_last2, g_last2, tau, gamma2, adaptive, i):
     #Discounted Features rewards (s - after encoding S-after lstm)
@@ -395,7 +409,7 @@ def get_pixel_change(pic1, pic2, STEP = 20):
 
 def train_A3C_united(batch_dict, gpu_id, Target_V1, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len="max"):
     
-    batch_dict["values"].append(V_last1) #Variable
+    batch_dict["values"].append(Target_V1) #Variable
             
     kld_loss1 = 0
     g_loss1 = 0
@@ -406,16 +420,22 @@ def train_A3C_united(batch_dict, gpu_id, Target_V1, s_last1, g_last1, tau, gamma
     batch_dict["ss1"].append(s_last1)
     
     for i in reversed(range(T)):
-        g_last1, part_g_loss1 = MPDI_loss_calc1(batch_dict, V_last1, g_last1, tau, gamma1, None, i)
-        g_loss1 += part_g_loss1
+        if TD_len=="max":
+            g_last1, part_g_loss1 = MPDI_loss_calc1(batch_dict, Target_V1, g_last1, tau, gamma1, None, i)
+            g_loss1 += part_g_loss1
         
-        restoration_loss1_part = (batch_dict["restoreds"][i] - batch_dict["restore_labels"][i]).pow(2).sum()
-        restoration_loss1 += restoration_loss1_part #*(abs(D1) + abs(D2))
+            restoration_loss1_part = (batch_dict["restoreds"][i] - batch_dict["restore_labels"][i]).pow(2).sum()
+            restoration_loss1 += restoration_loss1_part #*(abs(D1) + abs(D2))
         
 
         loss_mask = torch.zeros((1,6))
         loss_mask[0][batch_dict["actions"][i].item()] = 1
+#         print("len(batch_dict[states]) ",len(batch_dict["states"]))
+#         print("len(batch_dict[reward]) ",len(batch_dict["rewards"]))
+#         print("len(batch_dict[Q11s]) ",len(batch_dict["Q_11s"]))
+#         print(i)
         loss_mask = loss_mask.to(batch_dict["Q_11s"][i].device)
+        
                 
         if TD_len=="max":
             Target_V1 = gamma1 * Target_V1 + batch_dict["rewards"][i]

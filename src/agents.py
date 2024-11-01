@@ -8,16 +8,40 @@ import numpy as np
 ## add Star features or switches or separate class
 
 class MyReplayBuffer():
-    def __init__(self, max_num_batches=10000):
+    def __init__(self, max_num_batches=10000, device='cuda'):
         self.batch_dicts = []
         self.len = 0
+        self.max_num_batches = max_num_batches
+        self.device = device
+        
     def append(self, new_batch_dict):
-        if self.len>=max_num_batches:
+        if self.len>=self.max_num_batches:
             self.batch_dicts.pop(0)
+            
+        new_batch_dict = {"states":[kk.detach().cpu() for kk in new_batch_dict["states"]],
+                "rewards":new_batch_dict['rewards'],
+             "ss1":[kk.detach().cpu() for kk in  new_batch_dict["ss1"]],
+             "actions":new_batch_dict['actions'],
+             "Q_11s":[],
+             "values":[kk.detach().cpu() for kk in  new_batch_dict["values"]],
+             "restoreds":[kk.detach().cpu() for kk in new_batch_dict["restoreds"]],
+              "restore_labels":[kk.detach().cpu() for kk in new_batch_dict["restore_labels"]],
+             "gs1":[],
+             "memories": [kk.detach().cpu() for kk in new_batch_dict["memories"]],
+             "prev_g1": new_batch_dict["gs1"][0].detach()*0,
+             "prev_action1":new_batch_dict["prev_action1"]}
+        
         self.batch_dicts.append(new_batch_dict)
         
-    def sample(self):
-        return np.random.choice(self.batch_dicts)
+    def sample(self, num):
+        rets = np.random.choice(self.batch_dicts, num, replace=False)
+        for ret in rets:
+            for key in ret.keys():
+                if not (key in ["prev_g1", "prev_action1","rewards"]):
+                    ret[key] = [val.to(self.device) for val in ret[key]]
+        return rets
+                
+                    
         
         
 def init_lstm_states(player):
@@ -140,6 +164,8 @@ class Agent(object):
             #decoded,v,Q11, s, g
             x_restored1, v1, Q_11, s1, g1 = self.model1(Variable(
                 self.state.unsqueeze(0)), self.prev_action_1, self.prev_g1, self.memory_1)
+            
+            self.states.append(self.state.unsqueeze(0).detach())
             
             action_probs = F.softmax(Q_11) #+Q_22)
             action1 = action_probs.multinomial(1).data
@@ -329,6 +355,7 @@ class Agent(object):
         self.klds1 = []
         self.log_probs1_throughbase = []
         self.probs_throughbase = []
+        self.states =[]
         
         self.values1_runningmean = []
         self.gs1_runningmean = []
