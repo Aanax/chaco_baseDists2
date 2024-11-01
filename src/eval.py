@@ -129,7 +129,7 @@ if gpu_id >= 0:
     torch.cuda.manual_seed(args["Training"]["seed"])
 
 # model_path = "./trained_models/PongDeterministic-v4logs_a3c_united_FIX5_vaeMPDI_non_restricted_wmpdi05_eps_0.0_10__21.0.dat"
-model_path = "/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/Pong-v0logs_NewArch_true09375_1minus2_long_fix2_ps1_noshortbatchFix_TargetQ_v3_91507d094e279e131558baf401ca0427759d76d3_eps_0.0_1__-18.0.dat"
+model_path = "/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/Pong-v0logs_NewArch_true09375_4e10c9a2d3ca0835ed9a6c7720cbd8d17d1bc314_eps_0.0_1__-16.0.dat"
 #"/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/
 # cu#rrent_state_dict1729624157.0760121.torch"
 #Pong-v0logs_NewArch_test6_0aa7c67306b4cd50380b070342ed2ca59750b78c_eps_0.0_1__-16.0.dat"

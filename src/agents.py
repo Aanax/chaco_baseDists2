@@ -7,7 +7,19 @@ import numpy as np
 ## STOP rewrite agetnt with respect to hidden_states. 
 ## add Star features or switches or separate class
 
-
+class MyReplayBuffer():
+    def __init__(self, max_num_batches=10000):
+        self.batch_dicts = []
+        self.len = 0
+    def append(self, new_batch_dict):
+        if self.len>=max_num_batches:
+            self.batch_dicts.pop(0)
+        self.batch_dicts.append(new_batch_dict)
+        
+    def sample(self):
+        return np.random.choice(self.batch_dicts)
+        
+        
 def init_lstm_states(player):
     print("lstm states inited!!!!!")
     requires_grad = False
@@ -86,6 +98,9 @@ class Agent(object):
         
         self.states = []
         
+        self.replay_buffer = MyReplayBuffer()
+        self.first_batch_action = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
+        
         if self.args["Player"]["action_sample"]=="max":
             self.get_probs = self.get_probs_max
         elif self.args["Player"]["action_sample"]=="multinomial":
@@ -116,6 +131,10 @@ class Agent(object):
         return prob, log_prob, action, entropy
     
     def action_train(self):
+        
+        if len(self.rewards1)==0:
+            self.first_batch_action = self.prev_action_1
+        self.memory_1s.append(self.memory_1)
         
         with torch.autograd.set_detect_anomaly(True):
             #decoded,v,Q11, s, g
@@ -159,6 +178,7 @@ class Agent(object):
         self.rewards1.append(self.reward)
         self.ss1.append(s1)
         self.gs1.append(g1)
+        
         
 #         self.gs1_runningmean.append(torch.clone(self.g1_runningmean).detach())
 #         self.values1_runningmean.append(torch.clone(self.V1_runningmean).detach())
@@ -301,6 +321,7 @@ class Agent(object):
         self.probs_base = []
         self.probs_play = []
         self.actions = []
+        self.memory_1s = []
 #         self.alphas2 = []
         self.alphas1 = []
         self.rewards1 = []
