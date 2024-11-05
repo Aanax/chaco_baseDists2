@@ -3,12 +3,42 @@ import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
+import copy
 
 ## STOP rewrite agetnt with respect to hidden_states. 
 ## add Star features or switches or separate class
 
+def unload_batch_to_cpu(new_batch_dict, values_too = True):
+    if values_too:
+        new_batch_dict = {"states":[kk.detach().cpu() for kk in new_batch_dict["states"]],
+                    "rewards":new_batch_dict['rewards'],
+                 "ss1":[kk.detach().cpu() for kk in  new_batch_dict["ss1"]],
+                 "actions":new_batch_dict['actions'],
+                 "Q_11s":new_batch_dict['Q_11s'],
+                 "values":[kk.detach().cpu() for kk in  new_batch_dict["values"]],
+                 "restoreds":[kk.detach().cpu() for kk in new_batch_dict["restoreds"]],
+                  "restore_labels":[kk.detach().cpu() for kk in new_batch_dict["restore_labels"]],
+                 "gs1":[],
+                 "memories": [kk.detach().cpu() for kk in new_batch_dict["memories"]],
+                 "prev_g1": new_batch_dict["prev_g1"].cpu(),
+                 "prev_action1":new_batch_dict["prev_action1"]}
+    else:
+        new_batch_dict = {"states":[kk.detach().cpu() for kk in new_batch_dict["states"]],
+            "rewards":new_batch_dict['rewards'],
+         "ss1":[kk.detach().cpu() for kk in  new_batch_dict["ss1"]],
+         "actions":new_batch_dict['actions'],
+         "Q_11s":new_batch_dict['Q_11s'],
+         "values":new_batch_dict["values"],
+         "restoreds":[kk.detach().cpu() for kk in new_batch_dict["restoreds"]],
+          "restore_labels":[kk.detach().cpu() for kk in new_batch_dict["restore_labels"]],
+         "gs1":[],
+         "memories": [kk.detach().cpu() for kk in new_batch_dict["memories"]],
+         "prev_g1": new_batch_dict["prev_g1"].cpu(),
+         "prev_action1":new_batch_dict["prev_action1"]}
+            
+    return new_batch_dict
 class MyReplayBuffer():
-    def __init__(self, max_num_batches=10000, device='cuda'):
+    def __init__(self, max_num_batches=3000, device='cuda'):
         self.batch_dicts = []
         self.len = 0
         self.max_num_batches = max_num_batches
@@ -17,28 +47,20 @@ class MyReplayBuffer():
     def append(self, new_batch_dict):
         if self.len>=self.max_num_batches:
             self.batch_dicts.pop(0)
-            
-        new_batch_dict = {"states":[kk.detach().cpu() for kk in new_batch_dict["states"]],
-                "rewards":new_batch_dict['rewards'],
-             "ss1":[kk.detach().cpu() for kk in  new_batch_dict["ss1"]],
-             "actions":new_batch_dict['actions'],
-             "Q_11s":[],
-             "values":[kk.detach().cpu() for kk in  new_batch_dict["values"]],
-             "restoreds":[kk.detach().cpu() for kk in new_batch_dict["restoreds"]],
-              "restore_labels":[kk.detach().cpu() for kk in new_batch_dict["restore_labels"]],
-             "gs1":[],
-             "memories": [kk.detach().cpu() for kk in new_batch_dict["memories"]],
-             "prev_g1": new_batch_dict["gs1"][0].detach()*0,
-             "prev_action1":new_batch_dict["prev_action1"]}
+           
+        new_batch_dict = unload_batch_to_cpu(new_batch_dict, True)
+        
         
         self.batch_dicts.append(new_batch_dict)
+        self.len = len(self.batch_dicts)
         
-    def sample(self, num):
-        rets = np.random.choice(self.batch_dicts, num, replace=False)
+    def sample(self, num=1):
+        rets = copy.copy(np.random.choice(self.batch_dicts, num, replace=False))
         for ret in rets:
             for key in ret.keys():
                 if not (key in ["prev_g1", "prev_action1","rewards"]):
                     ret[key] = [val.to(self.device) for val in ret[key]]
+            ret["prev_g1"] = ret["prev_g1"].to(self.device)
         return rets
                 
                     

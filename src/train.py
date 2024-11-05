@@ -34,7 +34,7 @@ from utils import ensure_shared_grads
 from models import Level1
 # from models import Level2
 
-from agents import Agent
+from agents import Agent,unload_batch_to_cpu
 import torch.nn as nn
 
 
@@ -218,10 +218,13 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
               "restore_labels":player.restore_labels1,
              "gs1":player.gs1,
              "memories":player.memory_1s,
-                             "prev_g1":player.gs1[0].detach()*0,
+                             "prev_g1":torch.zeros((1,32,20,20)).to("cuda:"+str(gpu_id)),
                              "prev_action1":player.first_batch_action}
             
             player.replay_buffer.append(copy.copy(new_batch_dict))
+            
+            print(player.replay_buffer.len)
+            
             N_BATCHES_FOR_TRAIN = 1
             batch_for_train = player.replay_buffer.sample(N_BATCHES_FOR_TRAIN)
             batch_for_train=batch_for_train[0]
@@ -245,15 +248,19 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 
             losses_RB = train_func(batch_for_train, player.gpu_id, V_last1, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len = '1')
             
+            batch_for_train = unload_batch_to_cpu(batch_for_train, True)
+            
             losses = train_func(new_batch_dict, player.gpu_id, V_last1, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len = 'max')
 
 #             kld_loss1, policy_loss1, value_loss1, MPDI_loss1, kld_loss2, policy_loss2, value_loss2, MPDI_loss2, policy_loss_base, kld_loss_actor2, loss_restoration1,loss_restoration2, ce_loss1, ce_loss_base = losses
             
             #value_loss1,
-            restoration_loss1, g_loss1, loss_V1 = losses 
+            restoration_loss1_newest, g_loss1_newest, loss_V1_newest = losses 
             restoration_loss1_RB, g_loss1_RB, loss_V1_RB = losses_RB #not using rb g and rest
+            restoration_loss1 = restoration_loss1_newest
+            g_loss1 = g_loss1_newest
+            loss_V1 = loss_V1_newest + loss_V1_RB
             
-            restoration_loss1+=restoration_loss1_RB
 #             g_loss1+=g_loss1_RB
 #             loss_V1+=loss_V1_RB
 
@@ -273,8 +280,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             losses[2] = loss_Q_21
 #             losses[6] = loss_Q_22
 #             loss1 = (args["Training"]["w_policy"]*loss_Q_11)
-            (args["Training"]["w_policy"]*loss_V1).backward(retain_graph=True)
-            (args["Training"]["w_MPDI"]*g_loss1).backward(retain_graph=True)
+            
 
             def get_max_with_abs(tensor1d):
                 arg = torch.argmax(torch.abs(tensor1d))
@@ -326,6 +332,9 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             loss_restoration1 = args["Training"]["w_restoration"] * restoration_loss1
 #             loss_restoration2 = args["Training"]["w_restoration"] * restoration_loss2
             loss_restoration1.backward(retain_graph=True)
+            (args["Training"]["w_MPDI"]*g_loss1).backward(retain_graph=True)
+            (args["Training"]["w_policy"]*loss_V1).backward(retain_graph=False)
+            
 #             loss_restoration2.backward(retain_graph=True)
 #             loss1+=loss_restoration1
 #             loss2+=loss_restoration2
