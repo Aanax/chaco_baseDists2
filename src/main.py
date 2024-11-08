@@ -18,7 +18,7 @@ import configparser
 from typing import Dict
 from train import *        
 from time import gmtime, strftime
-
+import numpy as np
 # Based on
 # https://github.com/pytorch/examples/tree/master/mnist_hogwild
 # Training settings
@@ -159,7 +159,7 @@ if __name__ == '__main__':
     except:
         parallel_running_num = 1234
     
-    RUN_KEY = time.time()
+    RUN_KEY = str(time.time())+str(np.random.randint(33333333))
     
     p = mp.Process(target=test, args=(args, shared_model, env_conf, counter, parallel_running_num, RUN_KEY, lock))
     p.start()

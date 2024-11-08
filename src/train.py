@@ -193,7 +193,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             print("shared_model[0].device ",shared_model[0].device, flush=True)
             state = player.state
             x_restored1, v1, Q_11, s1, g1 = shared_model[0](Variable(
-                state.unsqueeze(0)), player.prev_action_1, player.prev_g1, player.memory_1)
+                state.unsqueeze(0)), player.prev_action_1) #, player.prev_g1, player.memory_1
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
 #             x_restored2, v2, a_22, Q_22, s2,g2, V_wave = player.model2(player.prev_g1.detach(), player.prev_action_2, player.prev_g2, player.memory_2)
@@ -221,34 +221,34 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
                              "prev_g1":torch.zeros((1,32,20,20)).to("cuda:"+str(gpu_id)),
                              "prev_action1":player.first_batch_action}
             
-            player.replay_buffer.append(copy.copy(new_batch_dict))
+#             player.replay_buffer.append(copy.copy(new_batch_dict))
             
-            print(player.replay_buffer.len)
+#             print(player.replay_buffer.len)
             
-            N_BATCHES_FOR_TRAIN = 1
-            batch_for_train = player.replay_buffer.sample(N_BATCHES_FOR_TRAIN)
-            batch_for_train=batch_for_train[0]
+#             N_BATCHES_FOR_TRAIN = 1
+#             batch_for_train = player.replay_buffer.sample(N_BATCHES_FOR_TRAIN)
+#             batch_for_train=batch_for_train[0]
             
-            prev_g1 = batch_for_train["prev_g1"]#[0]
-            prev_action_1 = batch_for_train["prev_action1"]#[0] #?? #put last action from prev bacth!
-            batch_for_train["Q_11s"]=[]
-            batch_for_train["gs1"]=[]
-            for i in range(len(batch_for_train["states"])):
-                #predicts
-                x_restored1, v1, Q_11, s1, g1 = player.model1(batch_for_train["states"][i], prev_action_1, prev_g1, batch_for_train["memories"][i])
-                batch_for_train["Q_11s"].append(Q_11)
+#             prev_g1 = batch_for_train["prev_g1"]#[0]
+#             prev_action_1 = batch_for_train["prev_action1"]#[0] #?? #put last action from prev bacth!
+#             batch_for_train["Q_11s"]=[]
+#             batch_for_train["gs1"]=[]
+#             for i in range(len(batch_for_train["states"])):
+#                 #predicts
+#                 x_restored1, v1, Q_11, s1, g1 = player.model1(batch_for_train["states"][i], prev_action_1) #prev_g1, batch_for_train["memories"][i]
+#                 batch_for_train["Q_11s"].append(Q_11)
                 
-                action1 = batch_for_train["actions"][i]
-                prev_action_1 = torch.zeros((1,6)).to(Q_11.device)
-                prev_action_1[0][action1.item()] = 1
-                prev_action_1 = prev_action_1.to(Q_11.device)
+#                 action1 = batch_for_train["actions"][i]
+#                 prev_action_1 = torch.zeros((1,6)).to(Q_11.device)
+#                 prev_action_1[0][action1.item()] = 1
+#                 prev_action_1 = prev_action_1.to(Q_11.device)
                 
-                prev_g1 = batch_for_train["prev_g1"]*0 #batch_for_train["gs1"][i]
+#                 prev_g1 = batch_for_train["prev_g1"]*0 #batch_for_train["gs1"][i]
                     
 
-            losses_RB = train_func(batch_for_train, player.gpu_id, V_last1, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len = '1')
+#             losses_RB = 0,0,0#train_func(batch_for_train, player.gpu_id, V_last1, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len = '1')
             
-            batch_for_train = unload_batch_to_cpu(batch_for_train, True)
+#             batch_for_train = unload_batch_to_cpu(batch_for_train, True)
             
             losses = train_func(new_batch_dict, player.gpu_id, V_last1, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len = 'max')
 
@@ -256,10 +256,10 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             
             #value_loss1,
             restoration_loss1_newest, g_loss1_newest, loss_V1_newest = losses 
-            restoration_loss1_RB, g_loss1_RB, loss_V1_RB = losses_RB #not using rb g and rest
+#             restoration_loss1_RB, g_loss1_RB, loss_V1_RB = losses_RB #not using rb g and rest
             restoration_loss1 = restoration_loss1_newest
             g_loss1 = g_loss1_newest
-            loss_V1 = loss_V1_newest + loss_V1_RB
+            loss_V1 = loss_V1_newest# + loss_V1_RB
             
 #             g_loss1+=g_loss1_RB
 #             loss_V1+=loss_V1_RB
@@ -451,7 +451,10 @@ def train_A3C_united(batch_dict, gpu_id, Target_V1, s_last1, g_last1, tau, gamma
         elif TD_len=="1":
             Target_V1 = gamma1 * batch_dict["values"][i+1] + batch_dict["rewards"][i]
             
-        advantage1 = Target_V1 - batch_dict["Q_11s"][i][0][batch_dict["actions"][i].item()]#player.values1[i]
+        advantage1 = Target_V1 - batch_dict["values"][i] 
+        #batch_dict["Q_11s"][i][0][batch_dict["actions"][i].item()]#player.values1[i]
+        advantage1 = torch.clip(advantage1, -1, 1)
+        
         ps = torch.nn.functional.softmax(batch_dict["Q_11s"][i]).detach()
         ps_modified = 1
 

@@ -29,14 +29,14 @@ class Decoder(nn.Module):
 class Oracle(nn.Module):
     def __init__(self, args, device):#1024
         super(Oracle, self).__init__()
-        self.conv = nn.Conv2d(32+32+32+6, 64, 5, stride=1, padding=2)
+        self.conv = nn.Conv2d(32+6, 64, 5, stride=1, padding=2)
         self.conv2 = nn.Conv2d(64, 32, 5, stride=1, padding=2)
 
-    def forward(self, x, previous_action, previous_g, memory):
+    def forward(self, x, previous_action): #previous_g, memory
         previous_action = previous_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,20,20)).detach()
         #prev_g 1,32,20,20
         #memory 1,32,20,20
-        x = torch.cat([x, previous_action, previous_g, memory], dim=1)        
+        x = torch.cat([x, previous_action], dim=1)  #previous_g, memory
         x = F.relu(self.conv(x))
         x = self.conv2(x)
         return x 
@@ -88,14 +88,14 @@ class Level1(nn.Module):
         self.train()
         self.z_EMA_t = 0
 
-    def forward(self, x, previous_action, previous_g, memory):
+    def forward(self, x, previous_action):
 #          = x
-        
+        #previous_g, memory
         s = self.encoder(x)
        
         decoded = self.decoder(s)
                 
-        g = self.oracle(s.detach(), previous_action.detach(), previous_g.detach(), memory.detach())
+        g = self.oracle(s.detach(), previous_action.detach()) #previous_g.detach(), memory.detach()
                         
         z = torch.cat([g.detach(),s], dim=1)
         z = z.view(z.size(0), -1)

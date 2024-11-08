@@ -185,7 +185,9 @@ class Agent(object):
         with torch.autograd.set_detect_anomaly(True):
             #decoded,v,Q11, s, g
             x_restored1, v1, Q_11, s1, g1 = self.model1(Variable(
-                self.state.unsqueeze(0)), self.prev_action_1, self.prev_g1, self.memory_1)
+                self.state.unsqueeze(0)), self.prev_action_1)
+            
+            #self.prev_g1, self.memory_1
             
             self.states.append(self.state.unsqueeze(0).detach())
             
@@ -299,7 +301,7 @@ class Agent(object):
                 
              #decoded,v,Q11, s, g
             x_restored1, v1, Q_11, s1, g1 = self.model1(Variable(
-                self.state.unsqueeze(0)), self.prev_action_1, self.prev_g1, self.memory_1)
+                self.state.unsqueeze(0)), self.prev_action_1) #self.prev_g1, self.memory_1
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
 #             x_restored2, v2, a_22, Q_22, s2,g2, V_wave = self.model2(self.prev_g1.detach(), self.prev_action_2, self.prev_g2, self.memory_2)
