@@ -70,7 +70,8 @@ class Level1(nn.Module):
         self.decoder = Decoder({}, device)
         self.oracle = Oracle({}, device)
         self.encoder = Encoder(args, device)
-        self.actor = nn.Linear(12800*2, 6)
+        self.actor_ext = nn.Linear(12800*2, 6)
+        self.actor_int = nn.Linear(12800*2, 6)
 #         self.critic = nn.Linear(12800*2, 1)
        
         for m in self.children():
@@ -100,10 +101,11 @@ class Level1(nn.Module):
         z = torch.cat([g.detach(),s], dim=1)
         z = z.view(z.size(0), -1)
         
-        Q11 = self.actor(z)
+        Q11_ext = self.actor_ext(z)
+        Q11_int = self.actor_int(z)
         
         ps = torch.nn.functional.softmax(Q11.detach())
         v =(ps*Q11).sum()
          
 #         print("DECODEd shape ", decoded.shape, flush=True)
-        return decoded,v,Q11, s, g #, hx, cx, s,S  
+        return decoded,v,Q11_ext,Q11_int, s, g #, hx, cx, s,S  

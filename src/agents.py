@@ -184,14 +184,21 @@ class Agent(object):
         
         with torch.autograd.set_detect_anomaly(True):
             #decoded,v,Q11, s, g
-            x_restored1, v1, Q_11, s1, g1 = self.model1(Variable(
+            x_restored1, v1, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(
                 self.state.unsqueeze(0)), self.prev_action_1)
+            
+            
+            A_ext = Q11_ext - v1
+            A_int = Q11_int - v1
+            
+            A = A_ext + A_int
             
             #self.prev_g1, self.memory_1
             
             self.states.append(self.state.unsqueeze(0).detach())
             
-            action_probs = F.softmax(Q_11) #+Q_22)
+            action_probs = F.softmax(A) #+Q_22)
+            self.action_probss.append(action_probs)
             action1 = action_probs.multinomial(1).data
             self.actions.append(action1)
             
@@ -300,7 +307,7 @@ class Agent(object):
 #                 self.cx2 = self.cx2.data
                 
              #decoded,v,Q11, s, g
-            x_restored1, v1, Q_11, s1, g1 = self.model1(Variable(
+            x_restored1, v1, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(
                 self.state.unsqueeze(0)), self.prev_action_1) #self.prev_g1, self.memory_1
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
@@ -372,6 +379,7 @@ class Agent(object):
         self.probs_play = []
         self.actions = []
         self.memory_1s = []
+        self.action_probss = []
 #         self.alphas2 = []
         self.alphas1 = []
         self.rewards1 = []
