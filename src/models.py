@@ -80,9 +80,13 @@ class Level1(nn.Module):
         self.decoder.apply(init_decoder)
 #         self.oracle.apply(init_base)
 #         self.ConvLSTM_mu.apply(init_base)
-        self.actor.weight.data = norm_col_init(
-        self.actor.weight.data, args["Model"]["a_init_std"])
-        self.actor.bias.data.fill_(0)
+        self.actor_ext.weight.data = norm_col_init(
+        self.actor_ext.weight.data, args["Model"]["a_init_std"])
+        self.actor_ext.bias.data.fill_(0)
+        
+        self.actor_int.weight.data = norm_col_init(
+        self.actor_int.weight.data, args["Model"]["a_init_std"])
+        self.actor_int.bias.data.fill_(0)
 #         self.critic.weight.data = norm_col_init(
 #         self.critic.weight.data, args["Model"]["v_init_std"])
 #         self.critic.bias.data.fill_(0) 
@@ -104,8 +108,8 @@ class Level1(nn.Module):
         Q11_ext = self.actor_ext(z)
         Q11_int = self.actor_int(z)
         
-        ps = torch.nn.functional.softmax(Q11.detach())
-        v =(ps*Q11).sum()
+        ps = torch.nn.functional.softmax(Q11_ext.detach())
+        v =(ps*Q11_ext).sum()
          
 #         print("DECODEd shape ", decoded.shape, flush=True)
         return decoded,v,Q11_ext,Q11_int, s, g #, hx, cx, s,S  

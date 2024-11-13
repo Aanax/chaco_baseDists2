@@ -192,13 +192,25 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
         if not player.done:
 #             print("shared_model[0].device ",shared_model[0].device, flush=True)
             state = player.state
-            x_restored1, v1, Q_11, s1, g1 = shared_model[0](Variable(
+            x_restored1, v1, Q11_ext, Q11_int, s1, g1 = shared_model[0](Variable(
                 state.unsqueeze(0)), player.prev_action_1) #, player.prev_g1, player.memory_1
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
 #             x_restored2, v2, a_22, Q_22, s2,g2, V_wave = player.model2(player.prev_g1.detach(), player.prev_action_2, player.prev_g2, player.memory_2)
             player.train_episodes_run+=1
             V_last1 = v1.detach()
+            Target_Qext = Q11_ext.detach()
+            Target_Qint = Q11_int.detach()
+            
+            
+            A_ext = Q11_ext - v1
+            A_int = Q11_int - v1
+            A = A_ext + A_int
+            last_action_probs = F.softmax(A)
+            player.action_probss.append(last_action_probs)
+            #action1 = action_probs.multinomial(1).data
+            #self.actions.append(action1)
+            
 #             V_last2 = v2.detach()
             s_last1 = s1#g1.detach()
 #             g_last2 = g2.detach()
@@ -217,6 +229,11 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
              "restoreds":player.restoreds1,
               "restore_labels":player.restore_labels1,
              "gs1":player.gs1,
+             "V_exts": player.V_exts,
+             "V_ints": player.V_ints,
+             "action_probss":player.action_probss,
+             "Q_11s_int":player.Q_11s_int,
+             "Q_11s_ext":player.Q_11s_ext,
              "memories":player.memory_1s,
                              "prev_g1":torch.zeros((1,32,20,20)).to("cuda:"+str(gpu_id)),
                              "prev_action1":player.first_batch_action}
@@ -250,16 +267,17 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             
 #             batch_for_train = unload_batch_to_cpu(batch_for_train, True)
             
-            losses = train_func(new_batch_dict, player.gpu_id, V_last1, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len = 'max')
+            losses = train_func(new_batch_dict, player.gpu_id, Target_Qext,Target_Qint, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len = 'max')
 
 #             kld_loss1, policy_loss1, value_loss1, MPDI_loss1, kld_loss2, policy_loss2, value_loss2, MPDI_loss2, policy_loss_base, kld_loss_actor2, loss_restoration1,loss_restoration2, ce_loss1, ce_loss_base = losses
             
             #value_loss1,
-            restoration_loss1_newest, g_loss1_newest, loss_V1_newest = losses 
+            restoration_loss1_newest, g_loss1_newest, loss_Qext_newest, loss_Qint_newest = losses 
 #             restoration_loss1_RB, g_loss1_RB, loss_V1_RB = losses_RB #not using rb g and rest
             restoration_loss1 = restoration_loss1_newest
             g_loss1 = g_loss1_newest
-            loss_V1 = loss_V1_newest# + loss_V1_RB
+#             loss_V1 = loss_V1_newest# + loss_V1_RB
+            loss_Qext, loss_Qint = loss_Qext_newest, loss_Qint_newest
             
 #             g_loss1+=g_loss1_RB
 #             loss_V1+=loss_V1_RB
@@ -292,9 +310,9 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
         
             mean_re1 = float(np.mean(player.rewards1))
             # ii.shape=(1,6) 
-            max_Q11_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_11s])) #(20)
-            max_Q11_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_11s]))
-            max_Q11_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_11s]))
+            max_Q11_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_11s_ext])) #(20)
+            max_Q11_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_11s_ext]))
+            max_Q11_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_11s_int]))
 #             max_Q21_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_21s]))
 #             max_Q21_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_21s]))
 #             max_Q21_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_21s]))
@@ -333,7 +351,11 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             loss_restoration2 = args["Training"]["w_restoration"] * restoration_loss2
             loss_restoration1.backward(retain_graph=True)
             (args["Training"]["w_MPDI"]*g_loss1).backward(retain_graph=True)
-            (args["Training"]["w_policy"]*loss_V1).backward(retain_graph=False)
+#             (args["Training"]["w_policy"]*loss_V1).backward(retain_graph=False)
+            (args["Training"]["w_policy"]*loss_Qext).backward(retain_graph=True)
+            (args["Training"]["w_policy"]*loss_Qint).backward(retain_graph=False)
+        
+            
             
 #             loss_restoration2.backward(retain_graph=True)
 #             loss1+=loss_restoration1
@@ -370,14 +392,14 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             del loss2
 
     
-def MPDI_loss_calc1(batch_dict, V_last1, g_last1, tau, gamma1, adaptive, i):
+def MPDI_loss_calc1(batch_dict, g_last1, tau, gamma1, adaptive, i, A_ext):
     #Discounted Features rewards (s - after encoding S-after lstm)
 #     print('len(batch_dict["gs1"]) ',len(batch_dict["gs1"]))
 #     print('len(batch_dict["rews"]) ',len(batch_dict["rewards"]))
     try:
         g_last1 = g_last1*gamma1 + (1-gamma1)*batch_dict["ss1"][i+1].detach()
         g_advantage1 = g_last1-batch_dict["gs1"][i]
-        return g_last1, 0.5 * g_advantage1.pow(2).sum()
+        return g_last1, 0.5 * g_advantage1.pow(2).sum()*F.sigmoid(A_ext.detach()), g_advantage1.pow(2).sum()
     
     except Exception as e:
 #         print(e, flush=True)
@@ -416,53 +438,63 @@ def get_pixel_change(pic1, pic2, STEP = 20):
 
 
 
-def train_A3C_united(batch_dict, gpu_id, Target_V1, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len="max"):
+def train_A3C_united(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len="max"):
     
-    batch_dict["values"].append(Target_V1) #Variable
+#     batch_dict["values"].append(Target_V1) #Variable
+    batch_dict["Q_11s_ext"].append(Target_Qext)
+    batch_dict["Q_11s_int"].append(Target_Qint)
+    
+    
+    batch_dict["V_exts"].append( (batch_dict["action_probss"][-1]*batch_dict["Q_11s_ext"][-1]).sum() )
+    batch_dict["V_ints"].append( (batch_dict["action_probss"][-1]*batch_dict["Q_11s_int"][-1]).sum() )
             
+    Target_Qext = batch_dict["V_exts"][-1]#Target_Qext.mean()
+    Target_Qint = batch_dict["V_ints"][-1] #Target_Qint.mean()
+    
     kld_loss1 = 0
     g_loss1 = 0
     loss_V1 = 0
     restoration_loss1=0
+    loss_Qint = 0
+    loss_Qext=0
     
     T = len(batch_dict["rewards"])
     batch_dict["ss1"].append(s_last1)
     
     for i in reversed(range(T)):
         
-        
-        
         loss_mask = torch.zeros((1,6))
         loss_mask[0][batch_dict["actions"][i].item()] = 1
-        loss_mask = loss_mask.to(batch_dict["Q_11s"][i].device)
+        loss_mask = loss_mask.to(batch_dict["Q_11s_ext"][i].device)
         
         
-        V_reweighted_ext = (self.action_probss[i]*batch_dict["Q_11s_ext"][i]).sum()
+        V_reweighted_ext = batch_dict["V_exts"][i] #(batch_dict["action_probss"][i]*batch_dict["Q_11s_ext"][i]).sum()
         if TD_len=="max":
             Target_Qext = gamma1 * Target_Qext + batch_dict["rewards"][i]
         elif TD_len=="1":
-            Target_Qext = gamma1 * batch_dict["values"][i+1] + batch_dict["rewards"][i]
+            Target_Qext = gamma1 * batch_dict["V_exts"][i+1] + batch_dict["rewards"][i]
             
         advantage_ext = Target_Qext - V_reweighted_ext #batch_dict["values"][i] 
         advantage_ext = torch.clip(advantage_ext, -1, 1)
-        loss_Qext = loss_Qext - advantage_ext.detach() * (batch_dict["Q_11s"][i]*loss_mask).sum() #* (1/k)
+        loss_Qext = loss_Qext - advantage_ext.detach() * (batch_dict["Q_11s_ext"][i]*loss_mask).sum() #* (1/k)
 
             
         if TD_len=="max":
-            g_last1, part_g_loss1 = MPDI_loss_calc1(batch_dict, Target_V1, g_last1, tau, gamma1, None, i)
+            g_last1, part_g_loss1, g_error_bonus = MPDI_loss_calc1(batch_dict, g_last1, tau, gamma1, None, i, batch_dict["Q_11s_ext"][i][0][batch_dict["actions"][i].item()]-V_reweighted_ext)
             g_loss1 += part_g_loss1
         
             restoration_loss1_part = (batch_dict["restoreds"][i] - batch_dict["restore_labels"][i]).pow(2).sum()
             restoration_loss1 += restoration_loss1_part #*(abs(D1) + abs(D2))
         
-        r_i = (1-gamma1)*(torch.sqrt(part_g_loss1*(1/(N-1)))
+        N = 1024
+        r_i = (1-gamma1)*(torch.sqrt(g_error_bonus*(1/(N-1))))
         
                 
-        V_reweighted_int = (self.action_probss[i]*batch_dict["Q_11s_int"][i]).sum()
+        V_reweighted_int = batch_dict["V_ints"][i] #(self.action_probss[i]*batch_dict["Q_11s_int"][i]).sum()
         if TD_len=="max":
             Target_Qint = gamma1 * Target_Qint + r_i #batch_dict["rewards_int"][i]
         elif TD_len=="1":
-            Target_Qint = gamma1 * batch_dict["Q_11s_int"][i+1].mean() + batch_dict["rewards_int"][i]
+            Target_Qint = gamma1 * batch_dict["V_ints"][i+1] + r_i
             
         advantage_int = Target_Qint - V_reweighted_int #batch_dict["values"][i] 
         advantage_int = torch.clip(advantage_int, -1, 1)

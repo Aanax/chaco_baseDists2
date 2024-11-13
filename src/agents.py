@@ -32,6 +32,7 @@ def unload_batch_to_cpu(new_batch_dict, values_too = True):
          "restoreds":[kk.detach().cpu() for kk in new_batch_dict["restoreds"]],
           "restore_labels":[kk.detach().cpu() for kk in new_batch_dict["restore_labels"]],
          "gs1":[],
+            #TODO "Q_11s_int":player.Q_11s_int, ext
          "memories": [kk.detach().cpu() for kk in new_batch_dict["memories"]],
          "prev_g1": new_batch_dict["prev_g1"].cpu(),
          "prev_action1":new_batch_dict["prev_action1"]}
@@ -202,10 +203,16 @@ class Agent(object):
             action1 = action_probs.multinomial(1).data
             self.actions.append(action1)
             
+            
+            V_reweighted_ext = (action_probs*Q11_ext).sum()
+            self.V_exts.append(V_reweighted_ext)
+            V_reweighted_int = (action_probs*Q11_int).sum()
+            self.V_ints.append(V_reweighted_int)
+            
             #TODO
-            self.prev_action_1 = torch.zeros((1,6)).to(Q_11.device)
+            self.prev_action_1 = torch.zeros((1,6)).to(Q11_ext.device)
             self.prev_action_1[0][action1.item()] = 1
-            self.prev_action_1 = self.prev_action_1.to(Q_11.device)
+            self.prev_action_1 = self.prev_action_1.to(Q11_ext.device)
             
             self.memory_1 = self.memory_1*self.gamma1 + s1.detach()            
             
@@ -219,8 +226,9 @@ class Agent(object):
         state, self.reward, self.done, self.info = self.env.step(
             action1.cpu().numpy())
         
-        self.Q_11s.append(Q_11)
-        
+#         self.Q_11s_.append(Q_11)
+        self.Q_11s_int.append(Q11_int)#":player.Q_11s_int,
+        self.Q_11s_ext.append(Q11_ext)
         self.state = torch.from_numpy(state).float()
         if self.gpu_id >= 0:
             with torch.cuda.device(self.gpu_id):
@@ -316,20 +324,30 @@ class Agent(object):
 #             with open("./q11s_test_debug3.txt", "a") as ff:
 #                 ff.write("trainsteps_"+str(self.train_episodes_run)+"_EPSLEN_"+str(self.eps_len)+'_Q_'+str(Q_11)+'\n')
                 
-            self.prev_Q11 = Q_11
+            self.prev_Q11 = Q11_ext
+            self.prev_Q11_int = Q11_int
 #             self.prev_Q22 = Q_22
 #             self.a_22_prev = a_22
             self.prev_state = s1
 
     
-            action_probs = F.softmax(Q_11)#+Q_22)
-            action1 = action_probs.multinomial(1).data #?
+            A_ext = Q11_ext - v1
+            A_int = Q11_int - v1
+            
+            A = A_ext + A_int
+            
+            #self.prev_g1, self.memory_1
+                        
+            action_probs = F.softmax(A) #+Q_22)
+            self.action_probss.append(action_probs)
+            action1 = action_probs.multinomial(1).data
+            self.actions.append(action1)
             self.last_a = action_probs
             
             #TODO
-            self.prev_action_1 = torch.zeros((1,6)).to(Q_11.device)
+            self.prev_action_1 = torch.zeros((1,6)).to(Q11_ext.device)
             self.prev_action_1[0][action1.item()] = 1
-            self.prev_action_1 = self.prev_action_1.to(Q_11.device)
+            self.prev_action_1 = self.prev_action_1.to(Q11_ext.device)
             
 #             self.prev_action_2 = (Q_22.detach()>=v2.detach()).type(torch.float).to(Q_11.device) #Q_11.detach()
             
@@ -380,6 +398,8 @@ class Agent(object):
         self.actions = []
         self.memory_1s = []
         self.action_probss = []
+        self.Q_11s_ext = []
+        self.Q_11s_int = []
 #         self.alphas2 = []
         self.alphas1 = []
         self.rewards1 = []
@@ -388,6 +408,9 @@ class Agent(object):
         self.log_probs1_throughbase = []
         self.probs_throughbase = []
         self.states =[]
+        
+        self.V_ints = []
+        self.V_exts = []
         
         self.values1_runningmean = []
         self.gs1_runningmean = []
