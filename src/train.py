@@ -192,19 +192,19 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
         if not player.done:
 #             print("shared_model[0].device ",shared_model[0].device, flush=True)
             state = player.state
-            x_restored1, v1, Q11_ext, Q11_int, s1, g1 = shared_model[0](Variable(
+            x_restored1, v1_ext,v1_int, Q11_ext, Q11_int, s1, g1 = shared_model[0](Variable(
                 state.unsqueeze(0)), player.prev_action_1) #, player.prev_g1, player.memory_1
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
 #             x_restored2, v2, a_22, Q_22, s2,g2, V_wave = player.model2(player.prev_g1.detach(), player.prev_action_2, player.prev_g2, player.memory_2)
             player.train_episodes_run+=1
-            V_last1 = v1.detach()
+            V_last1 = v1_ext.detach()
             Target_Qext = Q11_ext.detach()
             Target_Qint = Q11_int.detach()
             
             
-            A_ext = Q11_ext - v1
-            A_int = Q11_int - v1
+            A_ext = Q11_ext - v1_ext
+            A_int = Q11_int - v1_int
             A = A_ext + A_int
             last_action_probs = F.softmax(A)
             player.action_probss.append(last_action_probs)
@@ -399,7 +399,7 @@ def MPDI_loss_calc1(batch_dict, g_last1, tau, gamma1, adaptive, i, A_ext):
     try:
         g_last1 = g_last1*gamma1 + (1-gamma1)*batch_dict["ss1"][i+1].detach()
         g_advantage1 = g_last1-batch_dict["gs1"][i]
-        return g_last1, 0.5 * g_advantage1.pow(2).sum()*F.sigmoid(A_ext.detach()), g_advantage1.pow(2).sum()
+        return g_last1, 0.5 * g_advantage1.pow(2).sum(), g_advantage1.pow(2).sum() #*F.sigmoid(A_ext.detach())
     
     except Exception as e:
 #         print(e, flush=True)
@@ -480,14 +480,14 @@ def train_A3C_united(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_la
 
             
         if TD_len=="max":
-            g_last1, part_g_loss1, g_error_bonus = MPDI_loss_calc1(batch_dict, g_last1, tau, gamma1, None, i, batch_dict["Q_11s_ext"][i][0][batch_dict["actions"][i].item()]-V_reweighted_ext)
+            g_last1, part_g_loss1, g_error_bonus = MPDI_loss_calc1(batch_dict, g_last1, tau, gamma1, None, i, Target_Qext-V_reweighted_ext) #batch_dict["Q_11s_ext"][i][0][batch_dict["actions"][i].item()]
             g_loss1 += part_g_loss1
         
             restoration_loss1_part = (batch_dict["restoreds"][i] - batch_dict["restore_labels"][i]).pow(2).sum()
             restoration_loss1 += restoration_loss1_part #*(abs(D1) + abs(D2))
         
-        N = 1024
-        r_i = (1-gamma1)*(torch.sqrt(g_error_bonus*(1/(N-1))))
+        N = max(batch_dict["gs1"][i].shape) #1024
+        r_i = 0*(1-gamma1)*torch.exp(-torch.sqrt(g_error_bonus/(N-1))) #1-gamma1)*(torch.sqrt(g_error_bonus*(1/(N-1))))
         
                 
         V_reweighted_int = batch_dict["V_ints"][i] #(self.action_probss[i]*batch_dict["Q_11s_int"][i]).sum()

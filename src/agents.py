@@ -185,12 +185,12 @@ class Agent(object):
         
         with torch.autograd.set_detect_anomaly(True):
             #decoded,v,Q11, s, g
-            x_restored1, v1, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(
+            x_restored1, v1_ext,v1_int, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(
                 self.state.unsqueeze(0)), self.prev_action_1)
             
             
-            A_ext = Q11_ext - v1
-            A_int = Q11_int - v1
+            A_ext = Q11_ext - v1_ext
+            A_int = Q11_int - v1_int
             
             A = A_ext + A_int
             
@@ -237,7 +237,8 @@ class Agent(object):
  
         
         
-        self.values1.append(v1)
+        self.values1.append(v1_ext)
+        self.values1_int.append(v1_int)
         
         
         self.rewards1.append(self.reward)
@@ -315,7 +316,7 @@ class Agent(object):
 #                 self.cx2 = self.cx2.data
                 
              #decoded,v,Q11, s, g
-            x_restored1, v1, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(
+            x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(
                 self.state.unsqueeze(0)), self.prev_action_1) #self.prev_g1, self.memory_1
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
@@ -331,8 +332,8 @@ class Agent(object):
             self.prev_state = s1
 
     
-            A_ext = Q11_ext - v1
-            A_int = Q11_int - v1
+            A_ext = Q11_ext - v1_ext
+            A_int = Q11_int - v1_int
             
             A = A_ext + A_int
             
@@ -374,7 +375,7 @@ class Agent(object):
         
 #         self.last_g2 = g2
         self.last_g1 = g1
-        self.last_v = v1
+        self.last_v = v1_ext
 #         self.last_v2 = v2
         self.last_s = s1
 #         self.last_s2 = s2
@@ -408,6 +409,8 @@ class Agent(object):
         self.log_probs1_throughbase = []
         self.probs_throughbase = []
         self.states =[]
+        
+        self.values1_int = []
         
         self.V_ints = []
         self.V_exts = []

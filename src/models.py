@@ -108,8 +108,9 @@ class Level1(nn.Module):
         Q11_ext = self.actor_ext(z)
         Q11_int = self.actor_int(z)
         
-        ps = torch.nn.functional.softmax(Q11_ext.detach())
-        v =(ps*Q11_ext).sum()
+        ps = torch.nn.functional.softmax(Q11_ext.detach()+Q11_int.detach())
+        v_ext =(ps*Q11_ext).sum()
+        v_int =(ps*Q11_int).sum()
          
 #         print("DECODEd shape ", decoded.shape, flush=True)
-        return decoded,v,Q11_ext,Q11_int, s, g #, hx, cx, s,S  
+        return decoded, v_ext, v_int, Q11_ext,Q11_int, s, g #, hx, cx, s,S  
