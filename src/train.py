@@ -502,5 +502,5 @@ def train_A3C_united(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_la
         loss_Qint = loss_Qint - advantage_int.detach() * (batch_dict["Q_11s_int"][i]*loss_mask).sum() #* (1/k)
 
 
-    return restoration_loss1, g_loss1, loss_Qext, loss_Qint 
+    return restoration_loss1, g_loss1, loss_Qext, loss_Qint*0
 

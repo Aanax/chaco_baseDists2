@@ -108,7 +108,7 @@ class Level1(nn.Module):
         Q11_ext = self.actor_ext(z)
         Q11_int = self.actor_int(z)
         
-        ps = torch.nn.functional.softmax(Q11_ext.detach()+Q11_int.detach())
+        ps = torch.nn.functional.softmax(Q11_ext.detach())#+Q11_int.detach())
         v_ext =(ps*Q11_ext).sum()
         v_int =(ps*Q11_int).sum()
          

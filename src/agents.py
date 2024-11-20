@@ -192,7 +192,7 @@ class Agent(object):
             A_ext = Q11_ext - v1_ext
             A_int = Q11_int - v1_int
             
-            A = A_ext + A_int
+            A = A_ext# + A_int
             
             #self.prev_g1, self.memory_1
             
@@ -204,9 +204,9 @@ class Agent(object):
             self.actions.append(action1)
             
             
-            V_reweighted_ext = (action_probs*Q11_ext).sum()
+            V_reweighted_ext = v1_ext #(action_probs*Q11_ext).sum()
             self.V_exts.append(V_reweighted_ext)
-            V_reweighted_int = (action_probs*Q11_int).sum()
+            V_reweighted_int = v1_int #(action_probs*Q11_int).sum()
             self.V_ints.append(V_reweighted_int)
             
             #TODO
@@ -335,7 +335,7 @@ class Agent(object):
             A_ext = Q11_ext - v1_ext
             A_int = Q11_int - v1_int
             
-            A = A_ext + A_int
+            A = A_ext# + A_int
             
             #self.prev_g1, self.memory_1
                         
