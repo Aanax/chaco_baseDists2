@@ -192,7 +192,7 @@ class Agent(object):
             A_ext = Q11_ext - v1_ext
             A_int = Q11_int - v1_int
             
-            A = A_ext# + A_int
+            A = A_ext + A_int
             
             #self.prev_g1, self.memory_1
             
@@ -335,11 +335,11 @@ class Agent(object):
             A_ext = Q11_ext - v1_ext
             A_int = Q11_int - v1_int
             
-            A = A_ext# + A_int
+            A = A_ext + A_int
             
             #self.prev_g1, self.memory_1
                         
-            action_probs = F.softmax(A) #+Q_22)
+            action_probs = F.softmax(Q11_ext) #+Q_22)
             self.action_probss.append(action_probs)
             action1 = action_probs.multinomial(1).data
             self.actions.append(action1)

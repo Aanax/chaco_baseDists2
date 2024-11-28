@@ -397,9 +397,10 @@ def MPDI_loss_calc1(batch_dict, g_last1, tau, gamma1, adaptive, i, A_ext):
 #     print('len(batch_dict["gs1"]) ',len(batch_dict["gs1"]))
 #     print('len(batch_dict["rews"]) ',len(batch_dict["rewards"]))
     try:
-        g_last1 = g_last1*gamma1 + (1-gamma1)*batch_dict["ss1"][i+1].detach()
-        g_advantage1 = g_last1-batch_dict["gs1"][i]
-        return g_last1, 0.5 * g_advantage1.pow(2).sum(), g_advantage1.pow(2).sum() #*F.sigmoid(A_ext.detach())
+        g_last1 = g_last1*gamma1 + (batch_dict["ss1"][i+1].detach() - batch_dict["ss1"][i].detach()) #(1-gamma1)*batch_dict["ss1"][i+1].detach()
+        g_advantage1 = 1-F.cosine_similarity(g_last1, batch_dict["gs1"][i]) #g_last1-batch_dict["gs1"][i]
+        
+        return g_last1, -g_advantage1*F.sigmoid(A_ext.detach()), g_advantage1.detach() #g_advantage1.pow(2).sum() #*F.sigmoid(A_ext.detach()) #.pow(2).sum()
     
     except Exception as e:
 #         print(e, flush=True)
@@ -448,8 +449,8 @@ def train_A3C_united(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_la
     batch_dict["V_exts"].append( (batch_dict["action_probss"][-1]*batch_dict["Q_11s_ext"][-1]).sum() )
     batch_dict["V_ints"].append( (batch_dict["action_probss"][-1]*batch_dict["Q_11s_int"][-1]).sum() )
             
-    Target_Qext = batch_dict["V_exts"][-1]#Target_Qext.mean()
-    Target_Qint = batch_dict["V_ints"][-1] #Target_Qint.mean()
+    Target_Qext = Target_Qext.max().detach() #batch_dict["V_exts"][-1]#Target_Qext.mean()
+    Target_Qint = Target_Qint.max().detach() #batch_dict["V_ints"][-1] #Target_Qint.mean()
     
     kld_loss1 = 0
     g_loss1 = 0
@@ -474,9 +475,9 @@ def train_A3C_united(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_la
         elif TD_len=="1":
             Target_Qext = gamma1 * batch_dict["V_exts"][i+1] + batch_dict["rewards"][i]
             
-        advantage_ext = Target_Qext - V_reweighted_ext #batch_dict["values"][i] 
+        advantage_ext = Target_Qext - batch_dict["Q_11s_ext"][i][0][batch_dict["actions"][i].item()] #V_reweighted_ext #batch_dict["values"][i] 
         advantage_ext = torch.clip(advantage_ext, -1, 1)
-        loss_Qext = loss_Qext - advantage_ext.detach() * (batch_dict["Q_11s_ext"][i]*loss_mask).sum() #* (1/k)
+        loss_Qext = loss_Qext + (0.5*advantage_ext.pow(2)) #.detach() * (batch_dict["Q_11s_ext"][i]*loss_mask).sum() #* (1/k)
 
             
         if TD_len=="max":
@@ -487,7 +488,7 @@ def train_A3C_united(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_la
             restoration_loss1 += restoration_loss1_part #*(abs(D1) + abs(D2))
         
         N = max(batch_dict["gs1"][i].shape) #1024
-        r_i = 0*(1-gamma1)*torch.exp(-torch.sqrt(g_error_bonus/(N-1))) #1-gamma1)*(torch.sqrt(g_error_bonus*(1/(N-1))))
+        r_i = 1*(1-gamma1)*g_error_bonus #torch.exp(-torch.sqrt(g_error_bonus/(N-1))) #1-gamma1)*(torch.sqrt(g_error_bonus*(1/(N-1))))
         
                 
         V_reweighted_int = batch_dict["V_ints"][i] #(self.action_probss[i]*batch_dict["Q_11s_int"][i]).sum()
@@ -496,11 +497,12 @@ def train_A3C_united(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_la
         elif TD_len=="1":
             Target_Qint = gamma1 * batch_dict["V_ints"][i+1] + r_i
             
-        advantage_int = Target_Qint - V_reweighted_int #batch_dict["values"][i] 
+        advantage_int = Target_Qint - batch_dict["Q_11s_int"][i][0][batch_dict["actions"][i].item()] #V_reweighted_int #batch_dict["values"][i] 
         advantage_int = torch.clip(advantage_int, -1, 1)
         
-        loss_Qint = loss_Qint - advantage_int.detach() * (batch_dict["Q_11s_int"][i]*loss_mask).sum() #* (1/k)
+        loss_Qint = loss_Qint + (0.5*advantage_int.pow(2))
+        #.detach() * (batch_dict["Q_11s_int"][i]*loss_mask).sum() #* (1/k)
 
 
-    return restoration_loss1, g_loss1, loss_Qext, loss_Qint*0
+    return restoration_loss1, g_loss1, loss_Qext, loss_Qint
 
