@@ -321,7 +321,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             max_Q22_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_22s]))
 
             additional_logs = []
-
+#             print("losses ",losses, flush=True)
             for loss_i in losses:
                 if not (loss_i == 0):
                     additional_logs.append(loss_i.item())
@@ -398,7 +398,10 @@ def MPDI_loss_calc1(batch_dict, g_last1, tau, gamma1, adaptive, i, A_ext):
 #     print('len(batch_dict["rews"]) ',len(batch_dict["rewards"]))
     try:
         g_last1 = g_last1*gamma1 + (batch_dict["ss1"][i+1].detach() - batch_dict["ss1"][i].detach()) #(1-gamma1)*batch_dict["ss1"][i+1].detach()
-        g_advantage1 = 1-F.cosine_similarity(g_last1, batch_dict["gs1"][i]) #g_last1-batch_dict["gs1"][i]
+        
+#         print("g_last1.shape ",g_last1.shape, flush=True)
+        
+        g_advantage1 = 1-F.cosine_similarity(g_last1.ravel(), batch_dict["gs1"][i].ravel(),dim=0) #g_last1-batch_dict["gs1"][i]
         
         return g_last1, -g_advantage1*F.sigmoid(A_ext.detach()), g_advantage1.detach() #g_advantage1.pow(2).sum() #*F.sigmoid(A_ext.detach()) #.pow(2).sum()
     
