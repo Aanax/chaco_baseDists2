@@ -29,16 +29,19 @@ class Decoder(nn.Module):
 class Oracle(nn.Module):
     def __init__(self, args, device):#1024
         super(Oracle, self).__init__()
-        self.conv = nn.Conv2d(32+6, 64, 5, stride=1, padding=2)
+        self.conv = nn.Conv2d(32+32+6+32, 64, 5, stride=1, padding=2)
         self.conv2 = nn.Conv2d(64, 32, 5, stride=1, padding=2)
+        self.layernorm = nn.LayerNorm([32,20,20]) 
 
-    def forward(self, x, previous_action): #previous_g, memory
+    def forward(self, x, diff, previous_action, memory): #previous_g, memory
+        
         previous_action = previous_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1,6,20,20)).detach()
         #prev_g 1,32,20,20
         #memory 1,32,20,20
-        x = torch.cat([x, previous_action], dim=1)  #previous_g, memory
+        x = torch.cat([x, diff, previous_action, memory], dim=1)  #previous_g, memory
         x = F.relu(self.conv(x))
         x = self.conv2(x)
+        x = self.layernorm(x)  
         return x 
 
 class Encoder(nn.Module):
@@ -93,25 +96,27 @@ class Level1(nn.Module):
         self.train()
         self.z_EMA_t = 0
 
-    def forward(self, x, previous_action):
+    def forward(self, x, previous_action, memory, previous_s):
 #          = x
         #previous_g, memory
         s = self.encoder(x)
        
         decoded = self.decoder(s)
-                
-        g = self.oracle(s.detach(), previous_action.detach()) #previous_g.detach(), memory.detach()
+        
+        g=0
+#         g = self.oracle(s.detach(), s.detach()-previous_s.detach(), previous_action.detach(), memory.detach()) #previous_g.detach(), memory.detach()
                         
         z = torch.cat([g.detach(),s], dim=1)
         z = z.view(z.size(0), -1)
         
-        Q11_ext = self.actor_ext(z)
+        Q11_ext = self.actor_ext(z, s.detach()-previous_s.detach(), previous_action.detach())
 #         Q11_int = Q11_ext
-        Q11_int = self.actor_int(z)
+#         Q11_int = self.actor_int(z, s.detach()-previous_s.detach(), previous_action.detach())
+        Q11_int =0
         
         ps = torch.nn.functional.softmax(Q11_ext.detach())#+Q11_int.detach())
         v_ext =(ps*Q11_ext).sum()
-        v_int =(ps*Q11_int).sum()
+#         v_int =(ps*Q11_int).sum()
          
 #         print("DECODEd shape ", decoded.shape, flush=True)
         return decoded, v_ext, v_int.detach(), Q11_ext,Q11_int, s, g #, hx, cx, s,S  

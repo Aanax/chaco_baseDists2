@@ -127,6 +127,8 @@ class Agent(object):
         self.w_restoration = self.args["Training"]["w_restoration"]
         self.w_restoration_future = self.args["Training"]["w_restoration_future"]
         
+        self.prev_s1 = torch.zeros((1,32,20,20)).to("cuda:"+str(gpu_id))
+        
         self.g1_runningmean = 0
 #         self.V1_runningmean = 0
 #         self.D1 = 0
@@ -186,11 +188,12 @@ class Agent(object):
         with torch.autograd.set_detect_anomaly(True):
             #decoded,v,Q11, s, g
             x_restored1, v1_ext,v1_int, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(
-                self.state.unsqueeze(0)), self.prev_action_1)
+                self.state.unsqueeze(0)), self.prev_action_1, self.memory_1, self.prev_s1)
             
+            self.prev_s1 = s1.detach()
             
-            A_ext = Q11_ext - v1_ext
-            A_int = Q11_int - v1_int
+            A_ext = Q11_ext# - v1_ext
+            A_int = Q11_int# - v1_int
             
             A = A_ext + A_int
             
@@ -214,7 +217,7 @@ class Agent(object):
             self.prev_action_1[0][action1.item()] = 1
             self.prev_action_1 = self.prev_action_1.to(Q11_ext.device)
             
-            self.memory_1 = self.memory_1*self.gamma1 + s1.detach()            
+            self.memory_1 = self.memory_1*self.gamma1 + s1.detach()        
             
             self.prev_g1 = g1.detach()
            
@@ -317,7 +320,9 @@ class Agent(object):
                 
              #decoded,v,Q11, s, g
             x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(
-                self.state.unsqueeze(0)), self.prev_action_1) #self.prev_g1, self.memory_1
+                self.state.unsqueeze(0)), self.prev_action_1, self.memory_1, self.prev_s1) #self.prev_g1, self.memory_1
+            
+            self.prev_s1 = s1.detach()
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
 #             x_restored2, v2, a_22, Q_22, s2,g2, V_wave = self.model2(self.prev_g1.detach(), self.prev_action_2, self.prev_g2, self.memory_2)
@@ -332,14 +337,14 @@ class Agent(object):
             self.prev_state = s1
 
     
-            A_ext = Q11_ext - v1_ext
-            A_int = Q11_int - v1_int
+            A_ext = Q11_ext# - v1_ext
+            A_int = Q11_int# - v1_int
             
             A = A_ext + A_int
             
             #self.prev_g1, self.memory_1
                         
-            action_probs = F.softmax(Q11_ext) #+Q_22)
+            action_probs = F.softmax(A)#Q11_ext+Q_22)
             self.action_probss.append(action_probs)
             action1 = action_probs.multinomial(1).data
             self.actions.append(action1)
@@ -376,6 +381,7 @@ class Agent(object):
 #         self.last_g2 = g2
         self.last_g1 = g1
         self.last_v = v1_ext
+        self.last_v_int = v1_int
 #         self.last_v2 = v2
         self.last_s = s1
 #         self.last_s2 = s2

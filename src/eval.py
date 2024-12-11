@@ -129,7 +129,9 @@ if gpu_id >= 0:
     torch.cuda.manual_seed(args["Training"]["seed"])
 
 # model_path = "./trained_models/PongDeterministic-v4logs_a3c_united_FIX5_vaeMPDI_non_restricted_wmpdi05_eps_0.0_10__21.0.dat"
-model_path = "/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/Pong-v0logs_NewArch_true09375_4e10c9a2d3ca0835ed9a6c7720cbd8d17d1bc314_eps_0.0_1__-16.0.dat"
+model_path = "/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/Pong-v0logs_NewArch_test09375_goarl_cosine2fix2_diffOracle_advgmod_qlearn_4e10c9a2d3ca0835ed9a6c7720cbd8d17d1bc314_eps_0.0_1__-16.0.dat"
+
+#Pong-v0logs_NewArch_true09375_4e10c9a2d3ca0835ed9a6c7720cbd8d17d1bc314_eps_0.0_1__-16.0.dat"
 #"/s/ls4/users/aamore/BaseDists_ver_before_sVAE_hevyside3/trained_models/
 # cu#rrent_state_dict1729624157.0760121.torch"
 #Pong-v0logs_NewArch_test6_0aa7c67306b4cd50380b070342ed2ca59750b78c_eps_0.0_1__-16.0.dat"
@@ -317,11 +319,11 @@ for i_episode in range(1):
             
             Q11s.append(player.prev_Q11.detach().cpu().numpy().ravel())
             print(player.prev_Q11.detach().cpu().numpy().ravel())
-#             Q22s.append(player.prev_action_2.detach().cpu().numpy().ravel())
+            Q22s.append(player.prev_Q11_int.detach().cpu().numpy().ravel())
 #             Q21s.append(player.prev_Q21.detach().cpu().numpy().ravel())
             
 #             gs2.append(player.last_g2.detach().cpu().numpy())
-#             Vs2.append(player.last_v2.detach().cpu().item())
+            Vs2.append(player.last_v_int.detach().cpu().item())
 #             ss2.append(player.last_s2.detach().cpu().numpy())
 #             aas2.append(player.last_a2.detach().cpu().numpy())
 #             restoreds2.append(player.restored_state2.detach().cpu().numpy())
@@ -404,14 +406,14 @@ for i_episode in range(1):
 #                     np.save(f, np.array(gs2))
 #                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"ss2.npy", 'wb') as f:
 #                     np.save(f, np.array(ss2))
-#                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Vs2.npy", 'wb') as f:
-#                     np.save(f, np.array(Vs2))
+                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Vs2.npy", 'wb') as f:
+                    np.save(f, np.array(Vs2))
                     
                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Q11s.npy", 'wb') as f:
                     np.save(f, np.array(Q11s))
                 
-#                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Q22s.npy", 'wb') as f:
-#                     np.save(f, np.array(Q22s))
+                with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Q22s.npy", 'wb') as f:
+                    np.save(f, np.array(Q22s))
                 
 #                 with open(LOGSFOLDER+model_path.split("/")[-1].split(".")[0]+"Q21s.npy", 'wb') as f:
 #                     np.save(f, np.array(Q21s))
