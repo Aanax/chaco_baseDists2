@@ -193,7 +193,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             print("shared_model[0].device ",shared_model[0].device, flush=True)
             state = player.state
             x_restored1, v1_ext,v1_int, Q11_ext, Q11_int, s1, g1 = shared_model[0](Variable(
-                state.unsqueeze(0)), player.prev_action_1) #, player.prev_g1, player.memory_1
+                state.unsqueeze(0)), player.prev_action_1, player.previous_s) #, player.prev_g1, player.memory_1
             
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
 #             x_restored2, v2, a_22, Q_22, s2,g2, V_wave = player.model2(player.prev_g1.detach(), player.prev_action_2, player.prev_g2, player.memory_2)
@@ -401,9 +401,9 @@ def MPDI_loss_calc1(batch_dict, g_last1, tau, gamma1, adaptive, i, A_ext):
         
 #         print("g_last1.shape ",g_last1.shape, flush=True)
         
-        g_advantage1 = 1-F.cosine_similarity(g_last1.ravel(), batch_dict["gs1"][i].ravel(),dim=0) #g_last1-batch_dict["gs1"][i]
+        g_advantage1 = F.cosine_similarity(g_last1.ravel(), batch_dict["gs1"][i].ravel(),dim=0) #g_last1-batch_dict["gs1"][i]
         
-        return g_last1, -g_advantage1*F.sigmoid(A_ext.detach()), g_advantage1.detach() #g_advantage1.pow(2).sum() #*F.sigmoid(A_ext.detach()) #.pow(2).sum()
+        return g_last1, -g_advantage1*A_ext.detach(), g_advantage1.detach() #g_advantage1.pow(2).sum() #*F.sigmoid(A_ext.detach()) #.pow(2).sum()
     
     except Exception as e:
 #         print(e, flush=True)
@@ -484,7 +484,7 @@ def train_A3C_united(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_la
 
             
         if TD_len=="max":
-            g_last1, part_g_loss1, g_error_bonus = MPDI_loss_calc1(batch_dict, g_last1, tau, gamma1, None, i, Target_Qext-V_reweighted_ext) #batch_dict["Q_11s_ext"][i][0][batch_dict["actions"][i].item()]
+            g_last1, part_g_loss1, g_error_bonus = MPDI_loss_calc1(batch_dict, g_last1, tau, gamma1, None, i, advantage_ext.detach()) #batch_dict["Q_11s_ext"][i][0][batch_dict["actions"][i].item()]
             g_loss1 += part_g_loss1
         
             restoration_loss1_part = (batch_dict["restoreds"][i] - batch_dict["restore_labels"][i]).pow(2).sum()

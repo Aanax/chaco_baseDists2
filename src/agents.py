@@ -147,7 +147,7 @@ class Agent(object):
         
         self.replay_buffer = MyReplayBuffer()
         self.first_batch_action = torch.zeros((1,6)).to("cuda:"+str(gpu_id))
-        
+        self.previous_s = torch.zeros((1,32,20,20)).to("cuda:"+str(gpu_id))
         if self.args["Player"]["action_sample"]=="max":
             self.get_probs = self.get_probs_max
         elif self.args["Player"]["action_sample"]=="multinomial":
@@ -186,8 +186,9 @@ class Agent(object):
         with torch.autograd.set_detect_anomaly(True):
             #decoded,v,Q11, s, g
             x_restored1, v1_ext,v1_int, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(
-                self.state.unsqueeze(0)), self.prev_action_1)
+                self.state.unsqueeze(0)), self.prev_action_1, self.previous_s)
             
+            self.previous_s = s1
             
             A_ext = Q11_ext - v1_ext
             A_int = Q11_int - v1_int
@@ -317,8 +318,9 @@ class Agent(object):
                 
              #decoded,v,Q11, s, g
             x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(
-                self.state.unsqueeze(0)), self.prev_action_1) #self.prev_g1, self.memory_1
+                self.state.unsqueeze(0)), self.prev_action_1, self.previous_s) #self.prev_g1, self.memory_1
             
+            self.previous_s = s1
             #kl, v, a_21, a_22, Q_22, hx,cx,s,S
 #             x_restored2, v2, a_22, Q_22, s2,g2, V_wave = self.model2(self.prev_g1.detach(), self.prev_action_2, self.prev_g2, self.memory_2)
             

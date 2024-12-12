@@ -93,21 +93,21 @@ class Level1(nn.Module):
         self.train()
         self.z_EMA_t = 0
 
-    def forward(self, x, previous_action):
+    def forward(self, x, previous_action, previous_state):
 #          = x
         #previous_g, memory
         s = self.encoder(x)
        
         decoded = self.decoder(s)
                 
-        g = self.oracle(s.detach(), previous_action.detach()) #previous_g.detach(), memory.detach()
+        g = self.oracle(s.detach()-previous_state.detach(), previous_action.detach()) #previous_g.detach(), memory.detach()
                         
         z = torch.cat([g.detach(),s], dim=1)
         z = z.view(z.size(0), -1)
         
         Q11_ext = self.actor_ext(z)
 #         Q11_int = Q11_ext
-        Q11_int = self.actor_int(z)
+        Q11_int = self.actor_int(z.detach())
         
         ps = torch.nn.functional.softmax(Q11_ext.detach())#+Q11_int.detach())
         v_ext =(ps*Q11_ext).sum()
