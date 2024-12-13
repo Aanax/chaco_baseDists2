@@ -219,7 +219,7 @@ class Agent(object):
             
             self.memory_1 = self.memory_1*self.gamma1 + s1.detach()        
             
-            self.prev_g1 = g1.detach()
+            self.prev_g1 = g1#.detach()
            
             
             self.train_episodes_run+=1
@@ -362,7 +362,7 @@ class Agent(object):
 #             self.memory_2 = self.memory_2*self.gamma2 + s2.detach()
             
             
-            self.prev_g1 = g1.detach()
+            self.prev_g1 = g1#.detach()
 #             self.prev_g2 = g2.detach()
         
         state, self.reward, self.done, self.info = self.env.step(action1.cpu().numpy())

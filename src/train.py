@@ -200,7 +200,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             player.train_episodes_run+=1
             V_last1 = v1_ext.detach()
             Target_Qext = Q11_ext.detach()
-            Target_Qint = Q11_int.detach()
+            Target_Qint = Q11_int#.detach()
             
             
             A_ext = Q11_ext# - v1_ext
@@ -214,7 +214,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             V_last2 = v2.detach()
             s_last1 = s1#g1.detach()
 #             g_last2 = g2.detach()
-            g_last1 = g1.detach()
+            g_last1 = g1#.detach()
             
             
         with torch.autograd.set_detect_anomaly(True):
@@ -275,7 +275,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             restoration_loss1_newest, loss_Qext_newest = losses  #g_loss1_newest,  loss_Qint_newest 
 #             restoration_loss1_RB, g_loss1_RB, loss_V1_RB = losses_RB #not using rb g and rest
             restoration_loss1 = restoration_loss1_newest
-            g_loss1 = g_loss1_newest
+#             g_loss1 = g_loss1_newest
 #             loss_V1 = loss_V1_newest# + loss_V1_RB
             loss_Qext = loss_Qext_newest #, loss_Qint_newest , loss_Qint
             
@@ -312,7 +312,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             # ii.shape=(1,6) 
             max_Q11_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_11s_ext])) #(20)
             max_Q11_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_11s_ext]))
-            max_Q11_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_11s_int]))
+            max_Q11_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_11s_ext]))
 #             max_Q21_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_21s]))
 #             max_Q21_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_21s]))
 #             max_Q21_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_21s]))
@@ -443,17 +443,14 @@ def get_pixel_change(pic1, pic2, STEP = 20):
 
 
 def train_A3C_united(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len="max"):
-    
-#     batch_dict["values"].append(Target_V1) #Variable
-    batch_dict["Q_11s_ext"].append(Target_Qext)
+        batch_dict["Q_11s_ext"].append(Target_Qext)
     batch_dict["Q_11s_int"].append(Target_Qint)
-    
     
     batch_dict["V_exts"].append( (batch_dict["action_probss"][-1]*batch_dict["Q_11s_ext"][-1]).sum() )
     batch_dict["V_ints"].append( (batch_dict["action_probss"][-1]*batch_dict["Q_11s_int"][-1]).sum() )
             
     Target_Qext = Target_Qext.max().detach() #batch_dict["V_exts"][-1]#Target_Qext.mean()
-    Target_Qint = Target_Qint.max().detach() #batch_dict["V_ints"][-1] #Target_Qint.mean()
+    Target_Qint = 0#Target_Qint.max().detach() #batch_dict["V_ints"][-1] #Target_Qint.mean()
     
     kld_loss1 = 0
     g_loss1 = 0
@@ -466,11 +463,9 @@ def train_A3C_united(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_la
     batch_dict["ss1"].append(s_last1)
     
     for i in reversed(range(T)):
-        
         loss_mask = torch.zeros((1,6))
         loss_mask[0][batch_dict["actions"][i].item()] = 1
         loss_mask = loss_mask.to(batch_dict["Q_11s_ext"][i].device)
-        
         
         V_reweighted_ext = batch_dict["V_exts"][i] #(batch_dict["action_probss"][i]*batch_dict["Q_11s_ext"][i]).sum()
         if TD_len=="max":
@@ -481,31 +476,10 @@ def train_A3C_united(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_la
         advantage_ext = Target_Qext - batch_dict["Q_11s_ext"][i][0][batch_dict["actions"][i].item()] #V_reweighted_ext #batch_dict["values"][i] 
         advantage_ext = torch.clip(advantage_ext, -1, 1)
         loss_Qext = loss_Qext + (0.5*advantage_ext.pow(2)) #.detach() * (batch_dict["Q_11s_ext"][i]*loss_mask).sum() #* (1/k)
-
-            
-#         if TD_len=="max":
-#             g_last1, part_g_loss1, g_error_bonus = MPDI_loss_calc1(batch_dict, g_last1, tau, gamma1, None, i, advantage_ext.detach()) #batch_dict["Q_11s_ext"][i][0][batch_dict["actions"][i].item()]
-#             g_loss1 += part_g_loss1
         
-#             restoration_loss1_part = (batch_dict["restoreds"][i] - batch_dict["restore_labels"][i]).pow(2).sum()
-#             restoration_loss1 += restoration_loss1_part #*(abs(D1) + abs(D2))
-        
-#         N = max(batch_dict["gs1"][i].shape) #1024
-#         r_i = 1*(1-gamma1)*g_error_bonus #torch.exp(-torch.sqrt(g_error_bonus/(N-1))) #1-gamma1)*(torch.sqrt(g_error_bonus*(1/(N-1))))
-        
-                
-#         V_reweighted_int = batch_dict["V_ints"][i] #(self.action_probss[i]*batch_dict["Q_11s_int"][i]).sum()
-#         if TD_len=="max":
-#             Target_Qint = gamma1 * Target_Qint + r_i #batch_dict["rewards_int"][i]
-#         elif TD_len=="1":
-#             Target_Qint = gamma1 * batch_dict["V_ints"][i+1] + r_i
-            
-#         advantage_int = Target_Qint - batch_dict["Q_11s_int"][i][0][batch_dict["actions"][i].item()] #V_reweighted_int #batch_dict["values"][i] 
-#         advantage_int = torch.clip(advantage_int, -1, 1)
-        
-#         loss_Qint = loss_Qint + (0.5*advantage_int.pow(2))
-        #.detach() * (batch_dict["Q_11s_int"][i]*loss_mask).sum() #* (1/k)
-
+        restoration_loss1_part = (batch_dict["restoreds"][i] - batch_dict["restore_labels"][i]).pow(2).sum()
+        restoration_loss1 += restoration_loss1_part #*(abs(D1) + abs(D2))
+ 
 
     return restoration_loss1, loss_Qext#, loss_Qint g_loss1,
 
