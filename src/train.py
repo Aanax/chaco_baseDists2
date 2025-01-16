@@ -1,28 +1,11 @@
-# file for train function
 import os
 os.environ["OMP_NUM_THREADS"] = "1"
-
-# file for train function
 from functools import wraps
 import torch.nn.functional as F
 from torch.optim import AdamW
-
 import gc
 import time
-
 import cv2
-
-def timing(f):
-    @wraps(f)
-    def wrap(*args, **kw):
-        ts = time.time()
-        result = f(*args, **kw)
-        te = time.time()
-        print ('func:%r args:[%r, %r] took: %2.4f sec' % \
-          (f.__name__, args, kw, te-ts))
-        return result
-    return wrap
-
 from setproctitle import setproctitle as ptitle
 import torch
 import csv
@@ -30,21 +13,19 @@ import numpy as np
 from environment import atari_env
 from torch.autograd import Variable
 from utils import ensure_shared_grads
-
 from models import Level1
-# from models import Level2
-
 from agents import Agent,unload_batch_to_cpu
 import torch.nn as nn
-
-
 import copy
+
+#i need
+#STATg_CSV_PATH (or writer), env, gpu_id, player, optimizer, 
+
+#asserts. assert weights changed for shared and for model
+# assert batchsize >=1?
+# assert ...
     
-def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_start_time="unknown_start_time", RUN_KEY="only"):
-    
-    #set process title (visible in nvidia-smi!)
-    ptitle('Training Agent: {}'.format(rank))
-    
+def inits_for_train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_start_time="unknown_start_time", RUN_KEY="only"):
     
     #preparing for logging ---------------------------------------------------------------
     try:
@@ -60,22 +41,16 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
     torch.manual_seed(int(args["Training"]["seed"]) + rank)    
     if gpu_id >= 0:
         torch.cuda.manual_seed(int(args["Training"]["seed"]) + rank)
-        
-        
-        
+                
     #creating env -----------------------------------------------------  
     env = atari_env(args["Training"]["env"], env_conf, args)
-            
     env.seed(int(args["Training"]["seed"]) + rank)
     
     #creating Agent (wrapper around model capable of train step and test step making)------------
-    model_params_dict = args["Model"]
     _model1 = Level1(args, env.observation_space.shape[0],
                            env.action_space, device = "cuda:"+str(gpu_id))
-#     _model2 = Level2(args, env.observation_space.shape[0],
-#                            env.action_space, device = "cuda:"+str(gpu_id))
-
     shared_model[0]=shared_model[0].to('cuda')
+
     #redefine optimizer
     optimizer = AdamW(
         [
@@ -83,10 +58,10 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #         {'params': shared_model[1].parameters(), 'lr': args["Training"]["lr"]},], #*0.05
         lr=args["Training"]["lr"], amsgrad=args["Training"]["amsgrad"]   
         )
+    optimizer.zero_grad()
     
-    player = Agent(_model1, None, env, args, None, gpu_id)
+    player = Agent(_model1, shared_model[0], env, args, None, gpu_id)
     player.rank = rank
-#     player.
     player.state = player.env.reset()
     player.state = torch.from_numpy(player.state).float()
     
@@ -95,67 +70,48 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
         with torch.cuda.device(gpu_id):
             player.state = player.state.cuda()
             player.model1 = player.model1.cuda()
-#             player.model2 = player.model2.cuda()
     player.model1.train()
-#     player.model2.train()
     
+    return STATg_CSV_PATH, gpu_id, player, optimizer
     
+def synchronize_models(gpu_id, shared_model, player, RUN_KEY, lock):
+    if gpu_id >= 0:
+        with torch.cuda.device(gpu_id):
+            shared_model[0].load_state_dict(player.model1.state_dict())
+            with lock:
+                torch.save(player.model1.state_dict(), "./current_state_dict"+str(RUN_KEY)+".torch")
+
+def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_start_time="unknown_start_time", RUN_KEY="only"):
+    
+    #set process title (visible in nvidia-smi!)
+    ptitle('Training Agent: {}'.format(rank))
+    
+    STATg_CSV_PATH, gpu_id, player, optimizer = inits_for_train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_start_time, RUN_KEY)
     
     # init constants ---------------------------------------------------------------------------
     train_func = train_A3C_united
     print("-----------USING TRAINFUNC ",train_func)
     
-    player.eps_len += 2
     local_counter = 0
     tau = args["Training"]["tau"]
     gamma1 = args["Training"]["initial_gamma1"]
-    gamma2 = args["Training"]["initial_gamma2"]
     w_curiosity = float(args["Training"]["w_curiosity"])
     game_num=0
-    frame_num = 0
-    future_last = 0
-    g_last = torch.Tensor([0])
-    
-
     kld_loss_calc = _kld_loss_calc
     n_batch = 0
     
     ### LSTM STATES???
         
-    while True:
-        # on each run? we
-        
-        #ISTOPPED HERE!!!!!!!!!!!!!!!!!!!
-        
+    while True:                
         #copy weights
-#         with open("./batch_debug5.txt", "a") as ff:
-#                 ff.write('n_batch%20 '+str(n_batch%20)+'\n')
         if n_batch%80==0:
-#             print("shared_model WAS", shared_model[0].state_dict())
-            if gpu_id >= 0:
-                with torch.cuda.device(gpu_id):
-#                     player.model1.load_state_dict(shared_model[0].state_dict())
-                    shared_model[0].load_state_dict(player.model1.state_dict())
-                    with lock:
-                        torch.save(player.model1.state_dict(), "./current_state_dict"+str(RUN_KEY)+".torch")
-            w = shared_model[0].state_dict()
-#             print("shared_model BECAME ", w[list(w.keys())[0]][0][0])
-        # if was done than initializing lstm hiddens with zeros
-        #elese initializeing with data
+            synchronize_models(gpu_id, shared_model, player, RUN_KEY, lock)
+
         if player.done:
             player.reset_lstm_states()
         else:
-#             if player.train_episodes_run>=4:
+            #no BPTT
             player.detach_lstm_states(levels=[1,2]) #,2
-#             if player.train_episodes_run_2>=16:
-#                 player.detach_lstm_states(levels=[2])
-            
-#         with open("./q11s_trainWeights_debug6.txt", "a") as ff:
-#             w=player.model1.state_dict()
-#             ff.write(str(w[list(w.keys())[0]][0][0])+'\n\n')
-#             ff.write(str(w[list(w.keys())[4]][0][0])+'\n\n')
-#             ff.write(str(w[list(w.keys())[10]][0][0])+'\n\n')
-#             ff.write('\n\n\n-------------------------------\n\n\n')        
 
         # running simulation for num_steps
         n_batch += 1
@@ -173,53 +129,35 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
         if player.done:
             player.eps_len = 0
             game_num+=1
-            is_new_episode = True
             state = player.env.reset()
             player.state = torch.from_numpy(state).float()
+            player.train_episodes_run+=1
             if gpu_id >= 0:
                 with torch.cuda.device(gpu_id):
                     player.state = player.state.cuda()
+            
         
-        
+        #setting proper V values and etc (act as defaults for when game ended)
         with torch.cuda.device(gpu_id):
-            V_last1 = torch.zeros(1, 1).cuda()
-            gae1 = torch.zeros(1, 1).cuda()
             g_last1 = torch.zeros(1, 1).cuda()
-            V_last1 = torch.zeros(1, 1).cuda()
-            gae2 = torch.zeros(1, 1).cuda()
-            g_last2 = torch.zeros(1, 1).cuda()
+            Q11_ext = torch.zeros(1, 6).cuda()
+            Q11_int = torch.zeros(1, 6).cuda()
+            s_last1 = torch.zeros(1, 32, 20, 20).cuda()
         
         if not player.done:
-#             print("shared_model[0].device ",shared_model[0].device, flush=True)
             state = player.state
-            x_restored1, v1_ext,v1_int, Q11_ext, Q11_int, s1, g1 = shared_model[0](Variable(
+            x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = shared_model[0](Variable(
                 state.unsqueeze(0)), player.prev_action_1, player.memory_1, player.prev_s1) #, player.prev_g1, player.memory_1
             
-            #kl, v, a_21, a_22, Q_22, hx,cx,s,S
-#             x_restored2, v2, a_22, Q_22, s2,g2, V_wave = player.model2(player.prev_g1.detach(), player.prev_action_2, player.prev_g2, player.memory_2)
-            player.train_episodes_run+=1
-            V_last1 = v1_ext.detach()
-            Target_Qext = Q11_ext.detach()
-            Target_Qint = Q11_int#.detach()
-            
-            
-            A_ext = Q11_ext# - v1_ext
-            A_int = Q11_int# - v1_int
-            A = A_ext # + A_int
-            last_action_probs = F.softmax(A)
+            Target_Qext = torch.max(Q11_ext.detach()).item()
+            Target_Qint = Q11_int #.detach()
+            last_action_probs = F.softmax(Q11_ext)
             player.action_probss.append(last_action_probs)
-            #action1 = action_probs.multinomial(1).data
-            #self.actions.append(action1)
-            
-#             V_last2 = v2.detach()
-            s_last1 = s1#g1.detach()
-#             g_last2 = g2.detach()
-            g_last1 = g1#.detach()
+            s_last1 = s1 #g1.detach()
+            g_last1 = g1 #.detach()
             
             
-        with torch.autograd.set_detect_anomaly(True):
-            adaptive = False
-            
+        with torch.autograd.set_detect_anomaly(True):            
             new_batch_dict = {"states":player.states,
                 "rewards":player.rewards1,
              "ss1":player.ss1,
@@ -234,9 +172,10 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
              "action_probss":player.action_probss,
              "Q_11s_int":player.Q_11s_int,
              "Q_11s_ext":player.Q_11s_ext,
+             "Q_11s_ext_T":player.Q_11s_ext_T,
              "memories":player.memory_1s,
-                             "prev_g1":torch.zeros((1,32,20,20)).to("cuda:"+str(gpu_id)),
-                             "prev_action1":player.first_batch_action}
+            "prev_g1":torch.zeros((1,32,20,20)).to("cuda:"+str(gpu_id)),
+            "prev_action1":player.first_batch_action}
             
 #             player.replay_buffer.append(copy.copy(new_batch_dict))
             
@@ -286,26 +225,10 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             #value_loss1, value_loss2,
             
             losses = list(losses)
-#             loss_Q11_non_summed_components = loss_Q_11
-#             loss_Q21_non_summed_components = loss_Q_21
-#             loss_Q22_non_summed_components = loss_Q_22
-            
-#             loss_Q_11 = loss_Q_11.sum()
-#             loss_Q_21 = loss_Q_21.sum()
-#             loss_Q_22 = loss_Q_22.sum()
-            
-#             losses[1] = loss_Q_11
-#             losses[2] = loss_Q_21
-#             losses[6] = loss_Q_22
-#             loss1 = (args["Training"]["w_policy"]*loss_Q_11)
-            
 
             def get_max_with_abs(tensor1d):
                 arg = torch.argmax(torch.abs(tensor1d))
                 return tensor1d[arg].item()
-#             mean_V1 = torch.mean(torch.Tensor(player.values1)).cpu().numpy()
-#             mean_V2 = torch.mean(torch.Tensor(player.values2)).cpu().numpy()
-#             mean_Vs2 = torch.mean(torch.Tensor(player.values2)).cpu().numpy()
             mean_Vs1 = torch.mean(torch.Tensor(player.values1)).cpu().numpy()
         
             mean_re1 = float(np.mean(player.rewards1))
@@ -313,12 +236,6 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             max_Q11_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_11s_ext])) #(20)
             max_Q11_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_11s_ext]))
             max_Q11_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_11s_ext]))
-#             max_Q21_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_21s]))
-#             max_Q21_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_21s]))
-#             max_Q21_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_21s]))
-#             max_Q22_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_22s]))
-#             max_Q22_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_22s]))
-#             max_Q22_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_22s]))
 
             additional_logs = []
 #             print("losses ",losses, flush=True)
@@ -327,19 +244,6 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
                     additional_logs.append(loss_i.item())
                 else:
                     additional_logs.append(loss_i)
-                    
-#             print("loss_Q11_non_summed_components ", loss_Q11_non_summed_components.shape, flush=True)
-#             for qloss in loss_Q11_non_summed_components.squeeze():
-#                 if not (qloss == 0):
-#                     additional_logs.append(qloss.item())
-#                 else:
-#                     additional_logs.append(qloss)
-            
-#             for qloss in loss_Q21_non_summed_components.squeeze():
-#                 if not (qloss == 0):
-#                     additional_logs.append(qloss.item())
-#                 else:
-#                     additional_logs.append(qloss)
             
             f = open(STATg_CSV_PATH, 'a')
             writer = csv.writer(f)
@@ -374,7 +278,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #                 ensure_shared_grads(player.model1, shared_model[0], gpu=gpu_id >= 0)
     #             ensure_shared_grads(player.model2, shared_model[1], gpu=gpu_id >= 0)
                 optimizer.step()
-            player.clear_actions()
+            player.clear_state()
             player.model1.zero_grad()
             
             torch.cuda.empty_cache()
@@ -445,7 +349,7 @@ def get_pixel_change(pic1, pic2, STEP = 20):
 #Below is a refactored version of the `train_A3C_united` function. The refactoring focuses on improving readability, organizing the code for better maintainability, and ensuring efficient use of variables while keeping the core logic intact.
 
 #```python 
-def train_A3C_united(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len="max"):
+def train_A3C_united(batch_dict, gpu_id, QTarget, Target_Qint, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len="max"):
     # Initialize losses
     restoration_loss1 = 0
     loss_Qext = 0
@@ -454,9 +358,8 @@ def train_A3C_united(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_la
     T = len(batch_dict["rewards"])
     batch_dict["ss1"].append(s_last1)
     
-    QTarget = Target_Qext
     RSum = 0
-    k = 2
+    k = 1
     
     for i in reversed(range(T)):
         if T-i <= k:
@@ -464,9 +367,13 @@ def train_A3C_united(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_la
             RSum = RSum*gamma1 + batch_dict["rewards"][i]
         else:
             RSum = RSum*gamma1 + batch_dict["rewards"][i] - (batch_dict["rewards"][i+k]*(gamma1**k))
-            QTarget = torch.max(batch_dict["Q_11s_ext"][i+k])*(gamma1**k) + RSum
+            QTarget = torch.max(batch_dict["Q_11s_ext_T"][i+k])*(gamma1**k) + RSum
         
-        advantage_ext = QTarget.detach() - batch_dict["Q_11s_ext"][i][0][batch_dict["actions"][i].item()]
+        print('len(batch_dict["Q_11s_ext"])', len(batch_dict["Q_11s_ext"]), flush=True)
+        print('len actions', len(batch_dict["actions"]), flush=True)
+        print("i",i, flush=True)
+        print('len(batch_dict["Q_11s_ext"].shape)', batch_dict["Q_11s_ext"][0].shape, flush=True)
+        advantage_ext = QTarget - batch_dict["Q_11s_ext"][i][0][batch_dict["actions"][i].item()]
         advantage_ext = torch.clip(advantage_ext, -1, 1)
         
         loss_Qext = loss_Qext + (0.5*advantage_ext.pow(2))

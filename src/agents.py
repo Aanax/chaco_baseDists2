@@ -62,8 +62,11 @@ class Agent:
         self.prev_action_1 = torch.zeros((1, 6)).to(gpu_id)
         self.prev_g1 = torch.zeros((1, 32, 20, 20)).to(gpu_id)
         self.memory_1 = torch.zeros((1, 32, 20, 20)).to(gpu_id)
+        self.prev_s1 = torch.zeros((1, 32, 20, 20)).to(gpu_id)
         self.gpu_id = gpu_id
         self.args = args
+        self.eps_len = 0
+        self.done = False
         self.clear_state()
         self.gamma1 = args["Training"]["initial_gamma1"]
         self.buffer = ReplayBuffer()
@@ -100,20 +103,21 @@ class Agent:
         return prob, log_prob, action, entropy
 
     def action_train(self):
+        self.eps_len+=1
         if not self.rewards1:
             self.first_batch_action = self.prev_action_1
         self.memory_1s.append(self.memory_1)
         
         with torch.autograd.set_detect_anomaly(True):
             res1 = self.model1(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.memory_1, self.prev_s1)
-            resT1 = self.model_target[0](Variable(self.state.unsqueeze(0)), self.prev_action_1, self.memory_1, self.prev_s1)
+            resT1 = self.model_target(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.memory_1, self.prev_s1)
             x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = res1
             x_restored1_T, v1_ext_T, v1_int_T, Q11_ext_T, Q11_int_T, s1_T, g1_T = resT1
             
             self.prev_s1 = s1.detach()
             A_ext = Q11_ext
-            A_int = Q11_int
-            A = A_ext + A_int
+            # A_int = Q11_int
+            A = A_ext # + A_int
             self.states.append(self.state.unsqueeze(0).detach())
             
             action_probs = F.softmax(A)
@@ -121,13 +125,12 @@ class Agent:
             action1 = action_probs.multinomial(1).data
             self.actions.append(action1)
             
-            V_reweighted_ext = v1_ext
-            self.V_exts.append(V_reweighted_ext)
-            V_reweighted_int = v1_int
-            self.V_ints.append(V_reweighted_int)
+            self.V_exts.append(v1_ext)
+            self.V_ints.append(v1_int)
             
             self.prev_action_1 = torch.zeros((1, 6)).to(Q11_ext.device)
             self.prev_action_1[0][action1.item()] = 1
+
             self.memory_1 = self.memory_1 * self.gamma1 + s1.detach()
             self.prev_g1 = g1
             self.train_episodes_run += 1
@@ -135,7 +138,8 @@ class Agent:
             self.restore_labels1.append(self.state.unsqueeze(0).detach())
         
         state, self.reward, self.done, self.info = self.env.step(action1.cpu().numpy())
-        self.Q_11s_ext_T.append(Q11_ext)
+        self.Q_11s_ext_T.append(Q11_ext_T)
+        self.Q_11s_ext.append(Q11_ext)
         self.state = torch.from_numpy(state).float().to(self.gpu_id)
         self.reward = max(min(self.reward, 1), -1)
         self.values1.append(v1_ext)
@@ -162,6 +166,7 @@ class Agent:
                 self.train_episodes_run_2 = 0
                 
     def action_test(self, ZERO_ABASE=False):
+        self.eps_len+=1
         with torch.no_grad():
             if self.done:
                 self.reset_lstm_states()
@@ -172,7 +177,7 @@ class Agent:
             self.prev_s1 = s1.detach()
             A_ext = Q11_ext
             A_int = Q11_int
-            A = A_ext + A_int
+            A = A_ext # + A_int
             
             action_probs = F.softmax(A)
             self.action_probss.append(action_probs)
@@ -186,7 +191,6 @@ class Agent:
             self.prev_g1 = g1
         state, self.reward, self.done, self.info = self.env.step(action1.cpu().numpy())
         self.state = torch.from_numpy(state).float().to(self.gpu_id)
-        self.eps_len += 1
         return self
 
     def clear_state(self):

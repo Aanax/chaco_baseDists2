@@ -25,7 +25,7 @@ class Oracle(nn.Module):
 
     def forward(self, x, diff, previous_action, memory):
         previous_action = previous_action.squeeze().unsqueeze(1).unsqueeze(2).expand((1, 6, 20, 20)).detach()
-        x = torch.cat([x, diff, previous_action, memory], dim=1)
+        x = T.cat([x, diff, previous_action, memory], dim=1)
         x = F.relu(self.conv(x))
         x = self.conv2(x)
         x = self.layernorm(x)  
@@ -78,12 +78,12 @@ class Level1(nn.Module):
         s = self.encoder(x)
         decoded = self.decoder(s)
         g = 0
-        z = torch.cat([(s.detach() - previous_s.detach()).view(s.size(0), -1), s.view(s.size(0), -1), previous_action.detach().view(previous_action.size(0), -1)], dim=1)
+        z = T.cat([(s.detach() - previous_s.detach()).view(s.size(0), -1), s.view(s.size(0), -1), previous_action.detach().view(previous_action.size(0), -1)], dim=1)
         z = z.view(z.size(0), -1)
         
         Q11_ext = self.actor_ext(z)
         Q11_int = 0
-        ps = torch.nn.functional.softmax(Q11_ext.detach())
+        ps = T.nn.functional.softmax(Q11_ext.detach())
         v_ext = (ps * Q11_ext).sum()
         v_int = 0
         return decoded, v_ext, v_int, Q11_ext, Q11_int, s, g
