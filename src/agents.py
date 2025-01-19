@@ -162,7 +162,7 @@ class Agent:
             else:
                 for hx, cx in [(self.hx1, self.cx1), (self.hx2, self.cx2)]:
                     hx.data, cx.data
-            x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.memory_1, self.prev_s1)
+            x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.prev_s1)
             self.prev_s1 = s1.detach()
             
             action_probs = F.softmax(Q11_ext)

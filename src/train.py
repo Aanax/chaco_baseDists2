@@ -195,7 +195,7 @@ def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,count
         if not player.done:
             state = player.state
             x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = target_model[0](Variable(
-                state.unsqueeze(0)), player.prev_action_1, player.memory_1, player.prev_s1) #, player.prev_g1, player.memory_1
+                state.unsqueeze(0)), player.prev_action_1, player.prev_s1) #, player.prev_g1, player.memory_1
             
             Target_Qext = torch.max(Q11_ext.detach()).item()
             Target_Qint = Q11_int #.detach()
