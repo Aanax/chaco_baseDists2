@@ -109,45 +109,34 @@ class Agent:
         self.memory_1s.append(self.memory_1)
         
         with torch.autograd.set_detect_anomaly(True):
-            res1 = self.model1(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.memory_1, self.prev_s1)
-            resT1 = self.model_target(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.memory_1, self.prev_s1)
+            res1 = self.model1(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.prev_s1)
+            resT1 = self.model_target(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.prev_s1)
             x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = res1
             x_restored1_T, v1_ext_T, v1_int_T, Q11_ext_T, Q11_int_T, s1_T, g1_T = resT1
-            
             self.prev_s1 = s1.detach()
-            A_ext = Q11_ext
-            # A_int = Q11_int
-            A = A_ext # + A_int
-            self.states.append(self.state.unsqueeze(0).detach())
             
-            action_probs = F.softmax(A)
+            
+            action_probs = F.softmax(Q11_ext)
             self.action_probss.append(action_probs)
             action1 = action_probs.multinomial(1).data
             self.actions.append(action1)
-            
-            self.V_exts.append(v1_ext)
-            self.V_ints.append(v1_int)
-            
             self.prev_action_1 = torch.zeros((1, 6)).to(Q11_ext.device)
             self.prev_action_1[0][action1.item()] = 1
 
-            self.memory_1 = self.memory_1 * self.gamma1 + s1.detach()
-            self.prev_g1 = g1
-            self.train_episodes_run += 1
-            self.restoreds1.append(x_restored1)
-            self.restore_labels1.append(self.state.unsqueeze(0).detach())
-        
-        state, self.reward, self.done, self.info = self.env.step(action1.cpu().numpy())
+        self.train_episodes_run += 1
+        self.restoreds1.append(x_restored1)
+        self.restore_labels1.append(self.state.unsqueeze(0).detach())
+        self.states.append(self.state.unsqueeze(0).detach())
         self.Q_11s_ext_T.append(Q11_ext_T)
         self.Q_11s_ext.append(Q11_ext)
+        self.ss1.append(s1)
+
+        state, self.reward, self.done, self.info = self.env.step(action1.cpu().numpy())
+        
         self.state = torch.from_numpy(state).float().to(self.gpu_id)
         self.reward = max(min(self.reward, 1), -1)
-        self.values1.append(v1_ext)
-        self.values1_int.append(v1_int)
         self.rewards1.append(self.reward)
-        self.ss1.append(s1)
-        self.gs1.append(g1)
-        self.states1.append(self.state)
+        
         return self
 
     def reset_lstm_states(self):
@@ -175,11 +164,8 @@ class Agent:
                     hx.data, cx.data
             x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.memory_1, self.prev_s1)
             self.prev_s1 = s1.detach()
-            A_ext = Q11_ext
-            A_int = Q11_int
-            A = A_ext # + A_int
             
-            action_probs = F.softmax(A)
+            action_probs = F.softmax(Q11_ext)
             self.action_probss.append(action_probs)
             action1 = action_probs.multinomial(1).data
             self.actions.append(action1)

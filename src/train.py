@@ -210,19 +210,11 @@ def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,count
                 "rewards":player.rewards1,
              "ss1":player.ss1,
              "actions":player.actions,
-             "Q_11s":player.Q_11s,
-             "values":player.values1,
              "restoreds":player.restoreds1,
               "restore_labels":player.restore_labels1,
-             "gs1":player.gs1,
-             "V_exts": player.V_exts,
-             "V_ints": player.V_ints,
              "action_probss":player.action_probss,
-             "Q_11s_int":player.Q_11s_int,
              "Q_11s_ext":player.Q_11s_ext,
              "Q_11s_ext_T":player.Q_11s_ext_T,
-             "memories":player.memory_1s,
-            "prev_g1":torch.zeros((1,32,20,20)).to("cuda:"+str(gpu_id)),
             "prev_action1":player.first_batch_action}
             
 #             player.replay_buffer.append(copy.copy(new_batch_dict))
