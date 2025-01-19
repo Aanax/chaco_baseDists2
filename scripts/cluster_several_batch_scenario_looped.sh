@@ -42,7 +42,7 @@ echo `which python`
 echo `which conda`
 echo `conda env list`
 echo ----------
-conda activate new_torch
+# conda activate new_torch
 
 echo `which python`
 

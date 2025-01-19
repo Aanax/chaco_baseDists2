@@ -120,9 +120,11 @@ if __name__ == '__main__':
     
     model_params_dict = args["Model"]
     shared_model = torch.nn.Sequential(Level1(args, env.observation_space.shape[0], env.action_space, device = "cuda:"+str(0)))#device="cpu"))
-    #, Level2(args, env.observation_space.shape[0], env.action_space, device="cpu"))
-        
+    #, Level2(args, env.observation_space.shape[0], env.action_space, device="cpu"))        
     shared_model.share_memory()
+
+    target_model = torch.nn.Sequential(Level1(args, env.observation_space.shape[0], env.action_space, device = "cuda:"+str(0)))#device="cpu"))
+    target_model.share_memory()
 
     optimizer = SharedAdam(
         [
@@ -130,6 +132,8 @@ if __name__ == '__main__':
 #         {'params': shared_model[1].parameters(), 'lr': args["Training"]["lr"]},], #*0.05
         lr=args["Training"]["lr"], amsgrad=args["Training"]["amsgrad"]   
         )
+    
+    optimizer.zero_grad()
 #     optimizer_decoders = SharedAdam(
 #         shared_model.Decoder.parameters(), lr=args["Training"]["lr"], amsgrad=args["Training"]["amsgrad"])
     
@@ -167,7 +171,7 @@ if __name__ == '__main__':
     time.sleep(0.1)
     for rank in range(0, int(args["Training"]["workers"])):
         p = mp.Process(
-            target=train, args=(rank, args, shared_model, optimizer, env_conf, lock, counter, parallel_running_num, main_start_time, RUN_KEY))
+            target=train, args=(rank, args, target_model, shared_model, optimizer, env_conf,lock,counter, parallel_running_num, main_start_time, RUN_KEY))
         p.start()
         processes.append(p)
         time.sleep(0.1)

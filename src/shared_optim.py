@@ -271,7 +271,7 @@ class SharedAdam(optim.Optimizer):
 
                 if amsgrad:
                     # Maintains the maximum of all 2nd moment running avg. till now
-                    torch.maximum(max_exp_avg_sq, exp_avg_sq, out=max_exp_avg_sq)
+                    torch.max(max_exp_avg_sq, exp_avg_sq, out=max_exp_avg_sq)
                     # Use the max. for normalizing running avg. of gradient
                     denom = (max_exp_avg_sq.sqrt() / bias_correction2_sqrt).add_(
                         group["eps"]

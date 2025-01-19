@@ -25,7 +25,7 @@ import copy
 # assert batchsize >=1?
 # assert ...
     
-def inits_for_train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_start_time="unknown_start_time", RUN_KEY="only"):
+def inits_for_train(rank, args, target_model, shared_model, optimizer, env_conf,lock,counter, num, main_start_time="unknown_start_time", RUN_KEY="only"):
     
     #preparing for logging ---------------------------------------------------------------
     try:
@@ -49,18 +49,18 @@ def inits_for_train(rank, args, shared_model, optimizer, env_conf,lock,counter, 
     #creating Agent (wrapper around model capable of train step and test step making)------------
     _model1 = Level1(args, env.observation_space.shape[0],
                            env.action_space, device = "cuda:"+str(gpu_id))
-    shared_model[0]=shared_model[0].to('cuda')
+    target_model[0]=target_model[0].to('cuda')
 
-    #redefine optimizer
-    optimizer = AdamW(
-        [
-        {'params': _model1.parameters(), 'lr': args["Training"]["lr"]},], #0.001},
-#         {'params': shared_model[1].parameters(), 'lr': args["Training"]["lr"]},], #*0.05
-        lr=args["Training"]["lr"], amsgrad=args["Training"]["amsgrad"]   
-        )
-    optimizer.zero_grad()
+#     #redefine optimizer
+#     optimizer = AdamW(
+#         [
+#         {'params': _model1.parameters(), 'lr': args["Training"]["lr"]},], #0.001},
+# #         {'params': target_model[1].parameters(), 'lr': args["Training"]["lr"]},], #*0.05
+#         lr=args["Training"]["lr"], amsgrad=args["Training"]["amsgrad"]   
+#         )
+#     optimizer.zero_grad()
     
-    player = Agent(_model1, shared_model[0], env, args, None, gpu_id)
+    player = Agent(_model1, target_model[0], env, args, None, gpu_id)
     player.rank = rank
     player.state = player.env.reset()
     player.state = torch.from_numpy(player.state).float()
@@ -74,20 +74,71 @@ def inits_for_train(rank, args, shared_model, optimizer, env_conf,lock,counter, 
     
     return STATg_CSV_PATH, gpu_id, player, optimizer
     
-def synchronize_models(gpu_id, shared_model, player, RUN_KEY, lock):
+def synchronize_target_model(gpu_id, target_model, shared_model):
     if gpu_id >= 0:
         with torch.cuda.device(gpu_id):
-            shared_model[0].load_state_dict(player.model1.state_dict())
-            with lock:
-                torch.save(player.model1.state_dict(), "./current_state_dict"+str(RUN_KEY)+".torch")
+            target_model[0].load_state_dict(shared_model[0].state_dict())
 
-def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_start_time="unknown_start_time", RUN_KEY="only"):
+            # with lock:
+                # torch.save(player.model1.state_dict(), "./current_state_dict"+str(RUN_KEY)+".torch")
+def synchronize_player_model(gpu_id, player, shared_model):
+    if gpu_id >= 0:
+        with torch.cuda.device(gpu_id):
+            player.model1.load_state_dict(shared_model[0].state_dict())
+
+def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,counter, num, main_start_time="unknown_start_time", RUN_KEY="only"):
     
     #set process title (visible in nvidia-smi!)
     ptitle('Training Agent: {}'.format(rank))
     
-    STATg_CSV_PATH, gpu_id, player, optimizer = inits_for_train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_start_time, RUN_KEY)
+    # STATg_CSV_PATH, gpu_id, player, optimizer = inits_for_train(rank, args, target_model, shared_model, optimizer, env_conf,lock,counter, num, main_start_time, RUN_KEY)
+     
+    #preparing for logging ---------------------------------------------------------------
+    try:
+        os.mkdir("./"+args["Training"]["log_dir"]+"/stats"+str(main_start_time)+"_"+str(num)+"/")
+    except:
+        pass
+    STATg_CSV_PATH = "./"+args["Training"]["log_dir"]+"/stats"+str(main_start_time)+"_"+str(num)+"/"+"_STATS"+str(rank)+".csv"
+    f = open(STATg_CSV_PATH, 'w+')
+    f.close()
     
+    # getting gpu (rank is jusk number of worker)
+    gpu_id = args["Training"]["gpu_ids"][rank % len(args["Training"]["gpu_ids"])]
+    torch.manual_seed(int(args["Training"]["seed"]) + rank)    
+    if gpu_id >= 0:
+        torch.cuda.manual_seed(int(args["Training"]["seed"]) + rank)
+                
+    #creating env -----------------------------------------------------  
+    env = atari_env(args["Training"]["env"], env_conf, args)
+    env.seed(int(args["Training"]["seed"]) + rank)
+    
+    #creating Agent (wrapper around model capable of train step and test step making)------------
+    model1 = Level1(args, env.observation_space.shape[0],
+                           env.action_space, device = "cuda:"+str(gpu_id))
+    target_model[0]=target_model[0].to('cuda')
+
+#     #redefine optimizer
+#     optimizer = AdamW(
+#         [
+#         {'params': _model1.parameters(), 'lr': args["Training"]["lr"]},], #0.001},
+# #         {'params': target_model[1].parameters(), 'lr': args["Training"]["lr"]},], #*0.05
+#         lr=args["Training"]["lr"], amsgrad=args["Training"]["amsgrad"]   
+#         )
+#     optimizer.zero_grad()
+    
+    player = Agent(model1, target_model[0], env, args, None, gpu_id)
+    player.rank = rank
+    player.state = player.env.reset()
+    player.state = torch.from_numpy(player.state).float()
+    
+    #move model on gpu if needed--------------------------------------------------------------
+    if gpu_id >= 0:
+        with torch.cuda.device(gpu_id):
+            player.state = player.state.cuda()
+            player.model1 = player.model1.cuda()
+    player.model1.train()
+
+
     # init constants ---------------------------------------------------------------------------
     train_func = train_A3C_united
     print("-----------USING TRAINFUNC ",train_func)
@@ -103,10 +154,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
     ### LSTM STATES???
         
     while True:                
-        #copy weights
-        if n_batch%80==0:
-            synchronize_models(gpu_id, shared_model, player, RUN_KEY, lock)
-
+        
         if player.done:
             player.reset_lstm_states()
         else:
@@ -146,7 +194,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
         
         if not player.done:
             state = player.state
-            x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = shared_model[0](Variable(
+            x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = target_model[0](Variable(
                 state.unsqueeze(0)), player.prev_action_1, player.memory_1, player.prev_s1) #, player.prev_g1, player.memory_1
             
             Target_Qext = torch.max(Q11_ext.detach()).item()
@@ -211,18 +259,7 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
 #             kld_loss1, policy_loss1, value_loss1, MPDI_loss1, kld_loss2, policy_loss2, value_loss2, MPDI_loss2, policy_loss_base, kld_loss_actor2, loss_restoration1,loss_restoration2, ce_loss1, ce_loss_base = losses
             
             #value_loss1,
-            restoration_loss1_newest, loss_Qext_newest = losses  #g_loss1_newest,  loss_Qint_newest 
-#             restoration_loss1_RB, g_loss1_RB, loss_V1_RB = losses_RB #not using rb g and rest
-            restoration_loss1 = restoration_loss1_newest
-#             g_loss1 = g_loss1_newest
-#             loss_V1 = loss_V1_newest# + loss_V1_RB
-            loss_Qext = loss_Qext_newest #, loss_Qint_newest , loss_Qint
-            
-#             g_loss1+=g_loss1_RB
-#             loss_V1+=loss_V1_RB
-
-            # loss_Q_21,
-            #value_loss1, value_loss2,
+            restoration_loss1, loss_Qext = losses  #g_loss1_newest,  loss_Qint_newest 
             
             losses = list(losses)
 
@@ -256,36 +293,37 @@ def train(rank, args, shared_model, optimizer, env_conf,lock,counter, num, main_
             loss_restoration1.backward(retain_graph=True)
 #             (args["Training"]["w_MPDI"]*g_loss1).backward(retain_graph=True)
 #             (args["Training"]["w_policy"]*loss_V1).backward(retain_graph=False)
-            (args["Training"]["w_policy"]*loss_Qext).backward(retain_graph=False)
+            (args["Training"]["w_policy"]*loss_Qext).backward(retain_graph=True)
 #             (args["Training"]["w_policy"]*loss_Qint).backward(retain_graph=False)
-        
-            
-            
-#             loss_restoration2.backward(retain_graph=True)
-#             loss1+=loss_restoration1
-#             loss2+=loss_restoration2
-            
-#             g_loss1 = args["Training"]["w_MPDI"]*g_loss1
-#             g_loss2 = args["Training"]["w_MPDI"]*g_loss2
-        
-#             g_loss2.backward(retain_graph=True)
-#             g_loss1.backward(retain_graph=True)
 
-#             loss1.backward()#retain_graph=False)
-#             loss2.backward()#retain_graph=False)
+
+        
             
             if len(player.rewards1)>2:
-#                 ensure_shared_grads(player.model1, shared_model[0], gpu=gpu_id >= 0)
-    #             ensure_shared_grads(player.model2, shared_model[1], gpu=gpu_id >= 0)
+                # try:
+                ensure_shared_grads(player.model1, shared_model[0], gpu=gpu_id >= 0)
+                # except Exception as e:
+                #     print("LOSS lossQext ", args["Training"]["w_policy"]*loss_Qext, flush=True)
+                #     print("LOSS loss_restoration1 ", loss_restoration1, flush=True)
+                #     print(e)
+    #             ensure_shared_grads(player.model2, target_model[1], gpu=gpu_id >= 0)
                 optimizer.step()
+
+            
+            #copy weights
+            if n_batch%80==0:
+                synchronize_target_model(gpu_id, target_model, shared_model)
+            
+            synchronize_player_model(gpu_id, player, shared_model)
+
             player.clear_state()
             player.model1.zero_grad()
-            
             torch.cuda.empty_cache()
             gc.collect()
+
 #             player.model2.zero_grad()
             
-#             for p in shared_model[1].actor_base2.parameters():
+#             for p in target_model[1].actor_base2.parameters():
 #                 p.data.clamp_(0)
             
 #             for p in player.model2.actor_base2.parameters():
@@ -369,12 +407,12 @@ def train_A3C_united(batch_dict, gpu_id, QTarget, Target_Qint, s_last1, g_last1,
             RSum = RSum*gamma1 + batch_dict["rewards"][i] - (batch_dict["rewards"][i+k]*(gamma1**k))
             QTarget = torch.max(batch_dict["Q_11s_ext_T"][i+k])*(gamma1**k) + RSum
         
-        print('len(batch_dict["Q_11s_ext"])', len(batch_dict["Q_11s_ext"]), flush=True)
-        print('len actions', len(batch_dict["actions"]), flush=True)
-        print("i",i, flush=True)
-        print('len(batch_dict["Q_11s_ext"].shape)', batch_dict["Q_11s_ext"][0].shape, flush=True)
+        # print('len(batch_dict["Q_11s_ext"])', len(batch_dict["Q_11s_ext"]), flush=True)
+        # print('len actions', len(batch_dict["actions"]), flush=True)
+        # print("i",i, flush=True)
+        # print('len(batch_dict["Q_11s_ext"].shape)', batch_dict["Q_11s_ext"][0].shape, flush=True)
         advantage_ext = QTarget - batch_dict["Q_11s_ext"][i][0][batch_dict["actions"][i].item()]
-        advantage_ext = torch.clip(advantage_ext, -1, 1)
+        advantage_ext = torch.clamp(advantage_ext, -1, 1)
         
         loss_Qext = loss_Qext + (0.5*advantage_ext.pow(2))
         

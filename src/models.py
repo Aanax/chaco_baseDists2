@@ -56,10 +56,10 @@ class Level1(nn.Module):
     def __init__(self, args, shap, n_actions, device):
         super(Level1, self).__init__()
         self.decoder = Decoder({}, device)
-        self.oracle = Oracle({}, device)
+        # self.oracle = Oracle({}, device)
         self.encoder = Encoder(args, device)
         self.actor_ext = nn.Linear(25606, 6)
-        self.actor_int = nn.Linear(12800 * 2, 6)
+        # self.actor_int = nn.Linear(12800 * 2, 6)
         for m in self.children():
             if not hasattr(m, "name"):
                 m.name = None
@@ -68,13 +68,13 @@ class Level1(nn.Module):
         self.actor_ext.weight.data, args["Model"]["a_init_std"])
         self.actor_ext.bias.data.fill_(0)
         
-        self.actor_int.weight.data = norm_col_init(
-        self.actor_int.weight.data, args["Model"]["a_init_std"])
-        self.actor_int.bias.data.fill_(0)
+        # self.actor_int.weight.data = norm_col_init(
+        # self.actor_int.weight.data, args["Model"]["a_init_std"])
+        # self.actor_int.bias.data.fill_(0)
         self.train()
         self.z_EMA_t = 0
 
-    def forward(self, x, previous_action, memory, previous_s):
+    def forward(self, x, previous_action, previous_s):
         s = self.encoder(x)
         decoded = self.decoder(s)
         g = 0

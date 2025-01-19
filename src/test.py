@@ -47,7 +47,7 @@ def test(args, shared_model, env_conf, counter, num, RUN_KEY, lock):
     reward_total_sum = 0
     
     #     player.gpu_id = gpu_id
-    model_params_dict = args["Model"]
+    # model_params_dict = args["Model"]
 #     AgentClass = eval(args["Training"]["agent)
     _model1 = Level1(args, env.observation_space.shape[0],
                            env.action_space, device = "cuda:"+str(gpu_id))
@@ -82,19 +82,21 @@ def test(args, shared_model, env_conf, counter, num, RUN_KEY, lock):
 #             print("s conv4 weight MAX", torch.max(player.model.conv4.weight.data))
 # #             print("A lstm bias weight MAX", torch.max(player.model.A_lstm.bias_ih))
 #             print("T lstm bias weight MAX", torch.max(player.model.TA_lstm.bias_ih))
-            try:
-                with lock:
-                    if gpu_id >= 0:
-                        with torch.cuda.device(gpu_id):
-                            player.model1.load_state_dict(torch.load("./current_state_dict"+str(RUN_KEY)+".torch",
-                                                  weights_only=True))
-                                #shared_model[0].state_dict())
-        #                     player.model2.load_state_dict(shared_model[1].state_dict())
-                    else:
-                        player.model1.load_state_dict(torch.load("./current_state_dict"+str(RUN_KEY)+".torch",
-                                                  weights_only=True))
-            except Exception as e:
-                print(e, flush=True)
+            # try:
+            # with lock:
+            if gpu_id >= 0:
+                with torch.cuda.device(gpu_id):
+                    player.model1.load_state_dict(shared_model[0].state_dict())
+                        #torch.load("./current_state_dict"+str(RUN_KEY)+".torch",
+                            #                weights_only=True))
+                        #shared_model[0].state_dict())
+#                     player.model2.load_state_dict(shared_model[1].state_dict())
+            else:
+                player.model1.load_state_dict(shared_model[0].state_dict())
+                        #torch.load("./current_state_dict"+str(RUN_KEY)+".torch",
+                             #                     weights_only=True))
+            # except Exception as e:
+                # print(e, flush=True)
                 
                 
 #                 player.model2.load_state_dict(shared_model[1].state_dict())
@@ -102,7 +104,7 @@ def test(args, shared_model, env_conf, counter, num, RUN_KEY, lock):
 #             player.model2.eval()
 #             flag = False
         
-        with open("./q11s_testWeights_debug8.txt", "a") as ff:
+        with open("./q11s_testWeights_debug9.txt", "a") as ff:
             w=player.model1.state_dict()
             ff.write(str(w[list(w.keys())[0]][0][0])+'\n\n')
 #             ff.write(str(w[list(w.keys())[4]][0][0])+'\n\n')
