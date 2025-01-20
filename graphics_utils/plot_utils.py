@@ -54,6 +54,7 @@ def get_log_len(logname):
     #print("Got ",len(lines)," lines total")
     log_file.close()
     return lenfile
+
 def get_log_offset(logname):
     """
     how many lines to skip from start. containing exp info.

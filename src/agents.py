@@ -183,8 +183,12 @@ class Agent(object):
         
         if len(self.rewards1)==0:
             self.first_batch_action = self.prev_action_1
+
         self.memory_1s.append(self.memory_1)
-        
+        self.prev_action_1s.append(self.prev_action_1)
+        self.prev_s1s.append(self.prev_s1)
+        self.states.append(self.state.unsqueeze(0).detach())
+
         with torch.autograd.set_detect_anomaly(True):
             #decoded,v,Q11, s, g
             x_restored1, v1_ext,v1_int, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(
@@ -199,9 +203,8 @@ class Agent(object):
             
             #self.prev_g1, self.memory_1
             
-            self.states.append(self.state.unsqueeze(0).detach())
             
-            action_probs = F.softmax(A) #+Q_22)
+            action_probs = F.softmax(A, dim=1) #+Q_22)
             self.action_probss.append(action_probs)
             action1 = action_probs.multinomial(1).data
             self.actions.append(action1)
@@ -228,7 +231,7 @@ class Agent(object):
         
         state, self.reward, self.done, self.info = self.env.step(
             action1.cpu().numpy())
-        
+
 #         self.Q_11s_.append(Q_11)
         self.Q_11s_int.append(Q11_int)#":player.Q_11s_int,
         self.Q_11s_ext.append(Q11_ext)
@@ -344,7 +347,7 @@ class Agent(object):
             
             #self.prev_g1, self.memory_1
                         
-            action_probs = F.softmax(A)#Q11_ext+Q_22)
+            action_probs = F.softmax(A, dim=1)#Q11_ext+Q_22)
             self.action_probss.append(action_probs)
             action1 = action_probs.multinomial(1).data
             self.actions.append(action1)
@@ -404,6 +407,8 @@ class Agent(object):
         self.probs_play = []
         self.actions = []
         self.memory_1s = []
+        self.prev_s1s = []
+        self.prev_action_1s = []
         self.action_probss = []
         self.Q_11s_ext = []
         self.Q_11s_int = []
