@@ -25,16 +25,17 @@ import copy
 # assert batchsize >=1?
 # assert ...
     
-def inits_for_train(rank, args, target_model, shared_model, optimizer, env_conf,lock,counter, num, main_start_time="unknown_start_time", RUN_KEY="only"):
+def inits_for_train(rank, args, target_model, shared_model, optimizer, env_conf,lock,counter, num, main_start_time="unknown_start_time", RUN_KEY="only", logging=True):
     
     #preparing for logging ---------------------------------------------------------------
-    try:
-        os.mkdir("./"+args["Training"]["log_dir"]+"/stats"+str(main_start_time)+"_"+str(num)+"/")
-    except:
-        pass
     STATg_CSV_PATH = "./"+args["Training"]["log_dir"]+"/stats"+str(main_start_time)+"_"+str(num)+"/"+"_STATS"+str(rank)+".csv"
-    f = open(STATg_CSV_PATH, 'w+')
-    f.close()
+    if logging:
+        try:
+            os.mkdir("./"+args["Training"]["log_dir"]+"/stats"+str(main_start_time)+"_"+str(num)+"/")
+        except:
+            pass
+        f = open(STATg_CSV_PATH, 'w+')
+        f.close()
     
     # getting gpu (rank is jusk number of worker)
     gpu_id = args["Training"]["gpu_ids"][rank % len(args["Training"]["gpu_ids"])]
@@ -86,7 +87,7 @@ def synchronize_player_model(gpu_id, player, shared_model):
         with torch.cuda.device(gpu_id):
             player.model1.load_state_dict(shared_model[0].state_dict())
 
-def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,counter, num, main_start_time="unknown_start_time", RUN_KEY="only"):
+def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,counter, num, main_start_time="unknown_start_time", RUN_KEY="only", logging=True):
     
     #set process title (visible in nvidia-smi!)
     ptitle('Training Agent: {}'.format(rank))
@@ -94,13 +95,14 @@ def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,count
     # STATg_CSV_PATH, gpu_id, player, optimizer = inits_for_train(rank, args, target_model, shared_model, optimizer, env_conf,lock,counter, num, main_start_time, RUN_KEY)
      
     #preparing for logging ---------------------------------------------------------------
-    try:
-        os.mkdir("./"+args["Training"]["log_dir"]+"/stats"+str(main_start_time)+"_"+str(num)+"/")
-    except:
-        pass
-    STATg_CSV_PATH = "./"+args["Training"]["log_dir"]+"/stats"+str(main_start_time)+"_"+str(num)+"/"+"_STATS"+str(rank)+".csv"
-    f = open(STATg_CSV_PATH, 'w+')
-    f.close()
+    if logging:
+        try:
+            os.mkdir("./"+args["Training"]["log_dir"]+"/stats"+str(main_start_time)+"_"+str(num)+"/")
+        except:
+            pass
+        STATg_CSV_PATH = "./"+args["Training"]["log_dir"]+"/stats"+str(main_start_time)+"_"+str(num)+"/"+"_STATS"+str(rank)+".csv"
+        f = open(STATg_CSV_PATH, 'w+')
+        f.close()
     
     # getting gpu (rank is jusk number of worker)
     gpu_id = args["Training"]["gpu_ids"][rank % len(args["Training"]["gpu_ids"])]
@@ -140,7 +142,7 @@ def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,count
 
 
     # init constants ---------------------------------------------------------------------------
-    train_func = train_A3C_united
+    train_func = calculate_loss
     print("-----------USING TRAINFUNC ",train_func)
     
     local_counter = 0
@@ -165,8 +167,9 @@ def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,count
         n_batch += 1
         for step in range(args["Training"]["num_steps"]):
             player.action_train()
-            with lock:
-                counter.value += 1
+            if lock:
+                with lock:
+                    counter.value += 1
             local_counter+=1
             if player.done:
                 break
@@ -193,12 +196,33 @@ def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,count
             s_last1 = torch.zeros(1, 32, 20, 20).cuda()
         
         if not player.done:
-            state = player.state
-            x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = target_model[0](Variable(
-                state.unsqueeze(0)), player.prev_action_1, player.prev_s1) #, player.prev_g1, player.memory_1
-            
-            Target_Qext = torch.max(Q11_ext.detach()).item()
-            Target_Qint = Q11_int #.detach()
+            if False:
+                state = player.state
+                x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = target_model[0](Variable(
+                    state.unsqueeze(0)), player.prev_action_1, player.prev_s1) #, player.prev_g1, player.memory_1
+                Target_Qext = torch.max(Q11_ext.detach()).item()
+                Target_Qint = Q11_int #.detach()
+            else:
+                Q11_exts = []
+                Q11_ints = []
+                for state, prev_action, memory, prev_s1 in zip(
+                    player.states, player.prev_action_1s, player.memory_1s, player.prev_s1s
+                ):
+                    x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = shared_model[0](Variable(
+                        state), prev_action, memory, prev_s1)
+                    Q11_exts.append(Q11_ext)
+                    Q11_ints.append(Q11_int)
+
+                state = player.state
+                x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = shared_model[0](Variable(
+                    state.unsqueeze(0)), player.prev_action_1, player.memory_1, player.prev_s1)
+
+                Q11_exts.append(Q11_ext)
+                Q11_ints.append(Q11_int)
+
+                player.train_episodes_run += 1
+                Target_Qext = Q11_exts
+                Target_Qint = Q11_ints
             last_action_probs = F.softmax(Q11_ext)
             player.action_probss.append(last_action_probs)
             s_last1 = s1 #g1.detach()
@@ -274,12 +298,13 @@ def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,count
                 else:
                     additional_logs.append(loss_i)
             
-            f = open(STATg_CSV_PATH, 'a')
-            writer = csv.writer(f)
-            writer.writerow([mean_Vs1, mean_re1, counter.value, local_counter, max_Q11_1, max_Q11_2, max_Q11_3,]+additional_logs) #max_Q21_1, max_Q21_2, max_Q21_3,
-            f.close()
-            
-            
+            if logging:
+                f = open(STATg_CSV_PATH, 'a')
+                writer = csv.writer(f)
+                writer.writerow([mean_Vs1, mean_re1, counter.value, local_counter, max_Q11_1, max_Q11_2, max_Q11_3,]+additional_logs) #max_Q21_1, max_Q21_2, max_Q21_3,
+                f.close()
+
+
             loss_restoration1 = args["Training"]["w_restoration"] * restoration_loss1
 #             loss_restoration2 = args["Training"]["w_restoration"] * restoration_loss2
             loss_restoration1.backward(retain_graph=True)
@@ -411,4 +436,48 @@ def train_A3C_united(batch_dict, gpu_id, QTarget, Target_Qint, s_last1, g_last1,
         restoration_loss1_part = (batch_dict["restoreds"][i] - batch_dict["restore_labels"][i]).pow(2).sum()
         restoration_loss1 += restoration_loss1_part
     
+    return restoration_loss1, loss_Qext
+
+
+# передать Target_Qext за весь батч
+def calculate_loss(batch_dict, gpu_id, Target_Qext, Target_Qint, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len="max"):
+    """
+        QTarget := TarQNet[H] 
+        RSum := 0
+        For i in in reversed batch range 
+            If H-i<=k then
+                QTarget := QTarget*gamma + r[i] 
+                RSum := RSum*gamma + r[i] 
+            else 
+                RSum := RSum*gamma + r[i] - r[i+k] * gamma^k
+                QTarget := TarQNet[i+k] * gamma^k + RSum
+            Advantage := QTarget.detach - Q[i]
+    """    
+
+    H = len(batch_dict["rewards"])
+    QTarget = Target_Qext[H]
+    r = batch_dict["rewards"]
+    RSum = 0
+    k = 1
+    gamma = gamma1
+    
+    loss_Qext = 0
+    restoration_loss1 = 0
+    for i in reversed(range(H)):
+        if H - i <= k:
+            RSum = RSum * gamma + r[i]
+            QTarget = QTarget * gamma + r[i]
+        else:
+            RSum = RSum * gamma + r[i] - r[i + k] * pow(gamma, k)
+            QTarget = Target_Qext[i + k] * pow(gamma, k) + RSum
+
+        advantage_ext = QTarget.max().detach() - batch_dict["Q_11s_ext"][i][0][batch_dict["actions"][i].item()]
+        
+        advantage_ext = torch.clamp(advantage_ext, -1, 1) # ppo clip
+
+        # изменение градиента
+        loss_Qext = loss_Qext + (0.5 * advantage_ext.pow(2))
+        
+        restoration_loss1_part = (batch_dict["restoreds"][i] - batch_dict["restore_labels"][i]).pow(2).sum()
+        restoration_loss1 = restoration_loss1 + restoration_loss1_part 
     return restoration_loss1, loss_Qext

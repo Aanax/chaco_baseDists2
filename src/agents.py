@@ -107,6 +107,9 @@ class Agent:
         if not self.rewards1:
             self.first_batch_action = self.prev_action_1
         self.memory_1s.append(self.memory_1)
+        self.prev_action_1s.append(self.prev_action_1)
+        self.prev_s1s.append(self.prev_s1)
+        self.states.append(self.state.unsqueeze(0).detach())
         
         with torch.autograd.set_detect_anomaly(True):
             res1 = self.model1(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.prev_s1)
@@ -191,6 +194,8 @@ class Agent:
         self.probs_play = []
         self.actions = []
         self.memory_1s = []
+        self.prev_s1s = []
+        self.prev_action_1s = []
         self.action_probss = []
         self.Q_11s_ext = []
         self.Q_11s_int = []
