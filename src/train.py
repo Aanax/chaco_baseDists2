@@ -86,6 +86,33 @@ def synchronize_player_model(gpu_id, player, shared_model):
         with torch.cuda.device(gpu_id):
             player.model1.load_state_dict(shared_model[0].state_dict())
 
+def write_logs(player, losses, STATg_CSV_PATH, counter):
+    #///
+    def get_max_with_abs(tensor1d):
+        arg = torch.argmax(torch.abs(tensor1d))
+        return tensor1d[arg].item()
+    mean_Vs1 = torch.mean(torch.Tensor(player.values1)).cpu().numpy()
+
+    mean_re1 = float(np.mean(player.rewards1))
+    # ii.shape=(1,6) 
+    max_Q11_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_11s_ext])) #(20)
+    max_Q11_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_11s_ext]))
+    max_Q11_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_11s_ext]))
+
+    additional_logs = []
+#             print("losses ",losses, flush=True)
+    for loss_i in losses:
+        if not (loss_i == 0):
+            additional_logs.append(loss_i.item())
+        else:
+            additional_logs.append(loss_i)
+    
+    f = open(STATg_CSV_PATH, 'a')
+    writer = csv.writer(f)
+    writer.writerow([mean_Vs1, mean_re1, counter.value, max_Q11_1, max_Q11_2, max_Q11_3,]+additional_logs) #max_Q21_1, max_Q21_2, max_Q21_3,
+    f.close()
+            
+
 def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,counter, num, main_start_time="unknown_start_time", RUN_KEY="only"):
     
     #set process title (visible in nvidia-smi!)
@@ -194,15 +221,15 @@ def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,count
         
         if not player.done:
             state = player.state
-            x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = target_model[0](Variable(
+            x_restored1,Q11_ext, s1 = target_model[0](Variable(
                 state.unsqueeze(0)), player.prev_action_1, player.prev_s1) #, player.prev_g1, player.memory_1
             
             Target_Qext = torch.max(Q11_ext.detach()).item()
-            Target_Qint = Q11_int #.detach()
+            # Target_Qint = Q11_int #.detach()
             last_action_probs = F.softmax(Q11_ext)
             player.action_probss.append(last_action_probs)
             s_last1 = s1 #g1.detach()
-            g_last1 = g1 #.detach()
+            # g_last1 = g1 #.detach()
             
             
         with torch.autograd.set_detect_anomaly(True):            
@@ -217,88 +244,20 @@ def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,count
              "Q_11s_ext_T":player.Q_11s_ext_T,
             "prev_action1":player.first_batch_action}
             
-#             player.replay_buffer.append(copy.copy(new_batch_dict))
-            
-#             print(player.replay_buffer.len)
-            
-#             N_BATCHES_FOR_TRAIN = 1
-#             batch_for_train = player.replay_buffer.sample(N_BATCHES_FOR_TRAIN)
-#             batch_for_train=batch_for_train[0]
-            
-#             prev_g1 = batch_for_train["prev_g1"]#[0]
-#             prev_action_1 = batch_for_train["prev_action1"]#[0] #?? #put last action from prev bacth!
-#             batch_for_train["Q_11s"]=[]
-#             batch_for_train["gs1"]=[]
-#             for i in range(len(batch_for_train["states"])):
-#                 #predicts
-#                 x_restored1, v1, Q_11, s1, g1 = player.model1(batch_for_train["states"][i], prev_action_1) #prev_g1, batch_for_train["memories"][i]
-#                 batch_for_train["Q_11s"].append(Q_11)
-                
-#                 action1 = batch_for_train["actions"][i]
-#                 prev_action_1 = torch.zeros((1,6)).to(Q_11.device)
-#                 prev_action_1[0][action1.item()] = 1
-#                 prev_action_1 = prev_action_1.to(Q_11.device)
-                
-#                 prev_g1 = batch_for_train["prev_g1"]*0 #batch_for_train["gs1"][i]
-                    
+            losses = train_func(new_batch_dict, Target_Qext, s_last1, gamma1)
 
-#             losses_RB = 0,0,0#train_func(batch_for_train, player.gpu_id, V_last1, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len = '1')
-            
-#             batch_for_train = unload_batch_to_cpu(batch_for_train, True)
-            
-            losses = train_func(new_batch_dict, player.gpu_id, Target_Qext,Target_Qint, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len = 'max')
-
-#             kld_loss1, policy_loss1, value_loss1, MPDI_loss1, kld_loss2, policy_loss2, value_loss2, MPDI_loss2, policy_loss_base, kld_loss_actor2, loss_restoration1,loss_restoration2, ce_loss1, ce_loss_base = losses
-            
-            #value_loss1,
             restoration_loss1, loss_Qext = losses  #g_loss1_newest,  loss_Qint_newest 
             
             losses = list(losses)
 
-            def get_max_with_abs(tensor1d):
-                arg = torch.argmax(torch.abs(tensor1d))
-                return tensor1d[arg].item()
-            mean_Vs1 = torch.mean(torch.Tensor(player.values1)).cpu().numpy()
-        
-            mean_re1 = float(np.mean(player.rewards1))
-            # ii.shape=(1,6) 
-            max_Q11_1 = get_max_with_abs(torch.Tensor([ii[0][0] for ii in player.Q_11s_ext])) #(20)
-            max_Q11_2 = get_max_with_abs(torch.Tensor([ii[0][1] for ii in player.Q_11s_ext]))
-            max_Q11_3 = get_max_with_abs(torch.Tensor([ii[0][2] for ii in player.Q_11s_ext]))
-
-            additional_logs = []
-#             print("losses ",losses, flush=True)
-            for loss_i in losses:
-                if not (loss_i == 0):
-                    additional_logs.append(loss_i.item())
-                else:
-                    additional_logs.append(loss_i)
-            
-            f = open(STATg_CSV_PATH, 'a')
-            writer = csv.writer(f)
-            writer.writerow([mean_Vs1, mean_re1, counter.value, local_counter, max_Q11_1, max_Q11_2, max_Q11_3,]+additional_logs) #max_Q21_1, max_Q21_2, max_Q21_3,
-            f.close()
-            
+            write_logs(player, losses, STATg_CSV_PATH, counter)
             
             loss_restoration1 = args["Training"]["w_restoration"] * restoration_loss1
-#             loss_restoration2 = args["Training"]["w_restoration"] * restoration_loss2
             loss_restoration1.backward(retain_graph=True)
-#             (args["Training"]["w_MPDI"]*g_loss1).backward(retain_graph=True)
-#             (args["Training"]["w_policy"]*loss_V1).backward(retain_graph=False)
             (args["Training"]["w_policy"]*loss_Qext).backward(retain_graph=True)
-#             (args["Training"]["w_policy"]*loss_Qint).backward(retain_graph=False)
 
-
-        
-            
             if len(player.rewards1)>2:
-                # try:
                 ensure_shared_grads(player.model1, shared_model[0], gpu=gpu_id >= 0)
-                # except Exception as e:
-                #     print("LOSS lossQext ", args["Training"]["w_policy"]*loss_Qext, flush=True)
-                #     print("LOSS loss_restoration1 ", loss_restoration1, flush=True)
-                #     print(e)
-    #             ensure_shared_grads(player.model2, target_model[1], gpu=gpu_id >= 0)
                 optimizer.step()
 
             
@@ -312,18 +271,6 @@ def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,count
             player.model1.zero_grad()
             torch.cuda.empty_cache()
             gc.collect()
-
-#             player.model2.zero_grad()
-            
-#             for p in target_model[1].actor_base2.parameters():
-#                 p.data.clamp_(0)
-            
-#             for p in player.model2.actor_base2.parameters():
-#                 p.data.clamp_(0)
-                
-            
-#             del loss1
-#             del loss2
 
     
 def MPDI_loss_calc1(batch_dict, g_last1, tau, gamma1, adaptive, i, advantage_ext):
@@ -379,7 +326,7 @@ def get_pixel_change(pic1, pic2, STEP = 20):
 #Below is a refactored version of the `train_A3C_united` function. The refactoring focuses on improving readability, organizing the code for better maintainability, and ensuring efficient use of variables while keeping the core logic intact.
 
 #```python 
-def train_A3C_united(batch_dict, gpu_id, QTarget, Target_Qint, s_last1, g_last1, tau, gamma1, w_curiosity, kld_loss_calc, TD_len="max"):
+def train_A3C_united(batch_dict, QTarget, s_last1, gamma1):
     # Initialize losses
     restoration_loss1 = 0
     loss_Qext = 0

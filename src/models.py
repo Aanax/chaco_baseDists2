@@ -56,10 +56,8 @@ class Level1(nn.Module):
     def __init__(self, args, shap, n_actions, device):
         super(Level1, self).__init__()
         self.decoder = Decoder({}, device)
-        # self.oracle = Oracle({}, device)
         self.encoder = Encoder(args, device)
         self.actor_ext = nn.Linear(25606, 6)
-        # self.actor_int = nn.Linear(12800 * 2, 6)
         for m in self.children():
             if not hasattr(m, "name"):
                 m.name = None
@@ -68,22 +66,15 @@ class Level1(nn.Module):
         self.actor_ext.weight.data, args["Model"]["a_init_std"])
         self.actor_ext.bias.data.fill_(0)
         
-        # self.actor_int.weight.data = norm_col_init(
-        # self.actor_int.weight.data, args["Model"]["a_init_std"])
-        # self.actor_int.bias.data.fill_(0)
         self.train()
         self.z_EMA_t = 0
 
     def forward(self, x, previous_action, previous_s):
         s = self.encoder(x)
         decoded = self.decoder(s)
-        g = 0
         z = T.cat([(s.detach() - previous_s.detach()).view(s.size(0), -1), s.view(s.size(0), -1), previous_action.detach().view(previous_action.size(0), -1)], dim=1)
         z = z.view(z.size(0), -1)
         
         Q11_ext = self.actor_ext(z)
-        Q11_int = 0
         ps = T.nn.functional.softmax(Q11_ext.detach())
-        v_ext = (ps * Q11_ext).sum()
-        v_int = 0
-        return decoded, v_ext, v_int, Q11_ext, Q11_int, s, g
+        return decoded, Q11_ext, s

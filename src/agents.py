@@ -66,6 +66,7 @@ class Agent:
         self.gpu_id = gpu_id
         self.args = args
         self.eps_len = 0
+        self.random_action_prob = 1
         self.done = False
         self.clear_state()
         self.gamma1 = args["Training"]["initial_gamma1"]
@@ -104,21 +105,31 @@ class Agent:
 
     def action_train(self):
         self.eps_len+=1
+
+        self.random_action_prob = max(0, 1-self.eps_len/2000000)
+
         if not self.rewards1:
             self.first_batch_action = self.prev_action_1
-        self.memory_1s.append(self.memory_1)
         
         with torch.autograd.set_detect_anomaly(True):
             res1 = self.model1(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.prev_s1)
             resT1 = self.model_target(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.prev_s1)
-            x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = res1
-            x_restored1_T, v1_ext_T, v1_int_T, Q11_ext_T, Q11_int_T, s1_T, g1_T = resT1
+            x_restored1, Q11_ext, s1 = res1
+            x_restored1_T, Q11_ext_T, s1_T = resT1
             self.prev_s1 = s1.detach()
             
             
             action_probs = F.softmax(Q11_ext)
             self.action_probss.append(action_probs)
-            action1 = action_probs.multinomial(1).data
+
+
+
+            if np.random.random()<=self.random_action_prob:
+                action1 = torch.Tensor([[np.random.choice([0,1,2,3,4,5])]]).to(self.gpu_id).int()
+                # print("WAS ", action_probs.multinomial(1).data, flush=True)
+                # print("NOW ", action1, flush=True)
+            else:
+                action1 = action_probs.multinomial(1).data
             self.actions.append(action1)
             self.prev_action_1 = torch.zeros((1, 6)).to(Q11_ext.device)
             self.prev_action_1[0][action1.item()] = 1
@@ -162,7 +173,7 @@ class Agent:
             else:
                 for hx, cx in [(self.hx1, self.cx1), (self.hx2, self.cx2)]:
                     hx.data, cx.data
-            x_restored1, v1_ext, v1_int, Q11_ext, Q11_int, s1, g1 = self.model1(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.prev_s1)
+            x_restored1, Q11_ext, s1  = self.model1(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.prev_s1)
             self.prev_s1 = s1.detach()
             
             action_probs = F.softmax(Q11_ext)
@@ -173,8 +184,6 @@ class Agent:
             
             self.prev_action_1 = torch.zeros((1, 6)).to(Q11_ext.device)
             self.prev_action_1[0][action1.item()] = 1
-            self.memory_1 = self.memory_1 * self.gamma1 + s1.detach()
-            self.prev_g1 = g1
         state, self.reward, self.done, self.info = self.env.step(action1.cpu().numpy())
         self.state = torch.from_numpy(state).float().to(self.gpu_id)
         return self
