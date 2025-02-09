@@ -12,24 +12,39 @@ def unload_batch_to_cpu(batch_dict, values_too=True):
         "rewards": batch_dict["rewards"],
         "ss1": detached_dict("ss1"),
         "actions": batch_dict["actions"],
-        "Q_11s": batch_dict["Q_11s"],
-        "values": detached_dict("values") if values_too else batch_dict["values"],
-        "restoreds": detached_dict("restoreds"),
-        "restore_labels": detached_dict("restore_labels"),
-        "gs1": [],
+        "Q_11s_ext": batch_dict["Q_11s_ext"],
+        "Q_11s_ext_T": batch_dict["Q_11s_ext_T"],
+        "action_probss":batch_dict["action_probss"],
+        "states_next":batch_dict["states_next"],
+        # "values": detached_dict("values") if values_too else batch_dict["values"],
+        # "restoreds": detached_dict("restoreds"),
+        # "restore_labels": detached_dict("restore_labels"),
+        # "gs1": [],  
         "memories": detached_dict("memories"),
-        "prev_g1": batch_dict["prev_g1"].cpu(),
+        # "prev_g1": batch_dict["prev_g1"].cpu(),
         "prev_action1": batch_dict["prev_action1"],
     }
+
+    # {"states":player.states,
+    #         "rewards":player.rewards1,
+    #          "ss1":player.ss1,
+    #          "actions":player.actions,
+    #          "restoreds":player.restoreds1,
+    #           "restore_labels":player.restore_labels1,
+    #          "action_probss":player.action_probss,
+    #          "Q_11s_ext":player.Q_11s_ext,
+    #          "Q_11s_ext_T":player.Q_11s_ext_T,
+    #         "prev_action1":player.first_batch_action}
     return copy_dict
 
-class ReplayBuffer:
+class ReplayBufferBatch:
     def __init__(self, max_batches=3000, device='cuda'):
         self.buffer = []
         self.max_batches = max_batches
         self.device = device
         
-    def append(self, batch):
+    def append(self, batch):            
+
         if len(self.buffer) >= self.max_batches:
             self.buffer.pop(0)
         self.buffer.append(unload_batch_to_cpu(batch))
@@ -40,9 +55,40 @@ class ReplayBuffer:
             for key in sample.keys():
                 if key not in ["prev_g1", "prev_action1", "rewards"]:
                     sample[key] = [v.to(self.device) for v in sample[key]]
-            sample["prev_g1"] = sample["prev_g1"].to(self.device)
+            # sample["prev_g1"] = sample["prev_g1"].to(self.device)
         return samples
                 
+
+class ReplayBuffer:
+    """
+    samples here are dicts of lists of len 1
+    """
+    def __init__(self, max_len=3000, device='cuda'):
+        self.buffer = []
+        self.max_len = max_len
+        self.device = device
+        
+    def append(self, batch):
+        
+        for i in range(len(batch["states_next"])):
+            if len(self.buffer) >= self.max_len:
+                self.buffer.pop(0)
+            sample_dict = {}
+            for k in batch.keys():
+                sample_dict[k] = [batch[k][i]]
+            self.buffer.append(unload_batch_to_cpu(sample_dict))
+        # self.buffer.append(unload_batch_to_cpu(batch))
+           
+    def sample(self, num=1):
+        num = min(num,len(self.buffer))
+        samples = copy.copy(np.random.choice(self.buffer, num, replace=False))
+        for sample in samples:
+            for key in sample.keys():
+                if key not in ["prev_g1", "prev_action1", "rewards"]:
+                    sample[key] = [v.to(self.device) for v in sample[key]]
+            # sample["prev_g1"] = sample["prev_g1"].to(self.device)
+        return samples
+    
 def init_lstm_states(agent):
     print("Initializing LSTM states")
     if agent.gpu_id >= 0:
@@ -64,6 +110,7 @@ class Agent:
         self.memory_1 = torch.zeros((1, 32, 20, 20)).to(gpu_id)
         self.prev_s1 = torch.zeros((1, 32, 20, 20)).to(gpu_id)
         self.gpu_id = gpu_id
+        self.device = torch.device(f'cuda:{self.gpu_id}')
         self.args = args
         self.eps_len = 0
         self.random_action_prob = 1
@@ -106,14 +153,17 @@ class Agent:
     def action_train(self):
         self.eps_len+=1
 
-        self.random_action_prob = max(0, 1-self.eps_len/2000000)
+        self.random_action_prob = max(0, 1 -(self.eps_len/2000000))
 
         if not self.rewards1:
             self.first_batch_action = self.prev_action_1
         
         with torch.autograd.set_detect_anomaly(True):
-            res1 = self.model1(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.prev_s1)
-            resT1 = self.model_target(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.prev_s1)
+            # print("Variable(self.state.unsqueeze(0)).shape ", Variable(self.state.unsqueeze(0)).shape, flush=True)
+            # print("self.memory_1.detach().shape ", self.memory_1.detach().shape, flush=True)
+            # print("prev_action_1.shape ", self.prev_action_1.shape, flush=True)
+            res1 = self.model1(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.memory_1.detach())
+            resT1 = self.model_target(Variable(self.state.unsqueeze(0)), self.prev_action_1, self.memory_1.detach())
             x_restored1, Q11_ext, s1 = res1
             x_restored1_T, Q11_ext_T, s1_T = resT1
             self.prev_s1 = s1.detach()
@@ -141,6 +191,10 @@ class Agent:
         self.Q_11s_ext_T.append(Q11_ext_T)
         self.Q_11s_ext.append(Q11_ext)
         self.ss1.append(s1)
+
+        self.memories.append(self.memory_1) #we want what inputs to model at step i
+        self.memory_1 = self.memory_1*self.gamma1 + s1.detach()
+        
 
         state, self.reward, self.done, self.info = self.env.step(action1.cpu().numpy())
         
@@ -184,6 +238,9 @@ class Agent:
             
             self.prev_action_1 = torch.zeros((1, 6)).to(Q11_ext.device)
             self.prev_action_1[0][action1.item()] = 1
+
+            self.memory_1 = self.memory_1*self.gamma1 + s1.detach()
+
         state, self.reward, self.done, self.info = self.env.step(action1.cpu().numpy())
         self.state = torch.from_numpy(state).float().to(self.gpu_id)
         return self
@@ -200,6 +257,7 @@ class Agent:
         self.probs_play = []
         self.actions = []
         self.memory_1s = []
+        self.memories = []
         self.action_probss = []
         self.Q_11s_ext = []
         self.Q_11s_int = []

@@ -222,7 +222,7 @@ def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,count
         if not player.done:
             state = player.state
             x_restored1,Q11_ext, s1 = target_model[0](Variable(
-                state.unsqueeze(0)), player.prev_action_1, player.prev_s1) #, player.prev_g1, player.memory_1
+                state.unsqueeze(0)), player.prev_action_1, player.memory_1) #.prev_s1 #, player.prev_g1, player.memory_1
             
             Target_Qext = torch.max(Q11_ext.detach()).item()
             # Target_Qint = Q11_int #.detach()
@@ -232,9 +232,10 @@ def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,count
             # g_last1 = g1 #.detach()
             
             
-        with torch.autograd.set_detect_anomaly(True):            
+        with torch.autograd.set_detect_anomaly(True):
+
             new_batch_dict = {"states":player.states,
-                "rewards":player.rewards1,
+            "rewards":player.rewards1,
              "ss1":player.ss1,
              "actions":player.actions,
              "restoreds":player.restoreds1,
@@ -242,12 +243,26 @@ def train(rank, args, target_model, shared_model, optimizer, env_conf,lock,count
              "action_probss":player.action_probss,
              "Q_11s_ext":player.Q_11s_ext,
              "Q_11s_ext_T":player.Q_11s_ext_T,
-            "prev_action1":player.first_batch_action}
+             "states_next":player.states[1:],
+            "prev_action1":[torch.argmax(player.first_batch_action).unsqueeze(0).unsqueeze(0)]+list(player.actions),
+            "memories":player.memories}
+
+            #s a r s_t+1 q_t
+            # need predict Q(s)
+            # Calc target as Q_T(s_t+1) 
+            # loss = Q_T*gamma + r - Q
+            rb_samples = player.buffer.sample(num=20)
+
+            player.buffer.append(new_batch_dict)
             
             losses = train_func(new_batch_dict, Target_Qext, s_last1, gamma1)
 
             restoration_loss1, loss_Qext = losses  #g_loss1_newest,  loss_Qint_newest 
             
+            if len(rb_samples):
+                loss_rb = losses_from_rb(rb_samples, gamma1, player)
+                loss_Qext+=loss_rb
+
             losses = list(losses)
 
             write_logs(player, losses, STATg_CSV_PATH, counter)
@@ -359,3 +374,45 @@ def train_A3C_united(batch_dict, QTarget, s_last1, gamma1):
         restoration_loss1 += restoration_loss1_part
     
     return restoration_loss1, loss_Qext
+
+
+def losses_from_rb(samples, gamma1, player):
+    loss = 0
+
+    
+
+    for num_sample in range(len(samples)):
+        sample = samples[num_sample]
+
+        memories_next = sample["memories"][0]*gamma1+sample["ss1"][0]
+        prev_action_1_next = torch.zeros((1, 6)).to(player.device)
+        prev_action_1_next[0][sample["actions"][0].item()] = 1
+
+
+
+        x_restored1, Q11_target, s1 = player.model_target(Variable(
+                sample["states_next"][0]), prev_action_1_next, memories_next) #.prev_s1 #, player.prev_g1, player.memory_1
+
+        # print('sample["states"][0].shape ', sample["states"][0].shape, flush=True)
+        # print('sample["prev_action1"][0].shape ', sample["prev_action1"][0].shape, flush=True)
+        # print('sample["memories"][0].shape ', sample["memories"][0].shape, flush=True)
+
+        
+        prev_action_vec = torch.zeros((1, 6)).to(player.device)
+        prev_action_vec[0][sample["prev_action1"][0][0].item()] = 1
+
+        x_restored1, Q11, s1 = player.model1(Variable(
+                sample["states"][0]), prev_action_vec, sample["memories"][0]) #.prev_s1 #, player.prev_g1, player.memory_1
+
+        QTarget = torch.max(Q11_target)*gamma1 + sample["rewards"][0]
+
+        # loss += (QTarget.detach() - sample["Q_11s_ext"]) #not from saved but from current?
+        # loss += (QTarget.detach() - Q11)
+        advantage_ext = QTarget - Q11[0][sample["actions"][0].item()]
+        advantage_ext = torch.clamp(advantage_ext, -1, 1)
+        loss = loss + (0.5*advantage_ext.pow(2))
+
+    return loss
+
+
+

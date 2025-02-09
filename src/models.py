@@ -69,10 +69,11 @@ class Level1(nn.Module):
         self.train()
         self.z_EMA_t = 0
 
-    def forward(self, x, previous_action, previous_s):
+    def forward(self, x, previous_action, memory): #previous_s):
         s = self.encoder(x)
-        decoded = self.decoder(s)
-        z = T.cat([(s.detach() - previous_s.detach()).view(s.size(0), -1), s.view(s.size(0), -1), previous_action.detach().view(previous_action.size(0), -1)], dim=1)
+        decoded = self.decoder(s) 
+        #s.detach() - previous_s.detach()
+        z = T.cat([memory.view(s.size(0), -1), s.view(s.size(0), -1), previous_action.detach().view(previous_action.size(0), -1)], dim=1)
         z = z.view(z.size(0), -1)
         
         Q11_ext = self.actor_ext(z)
